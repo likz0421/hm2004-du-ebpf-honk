@@ -4,18 +4,21 @@
 
 case "$1" in
 	list)
-		cat <<-'EOF'
+		cat <<-'EOT'
 		{
 			"status": { },
 			"check": { },
-			"upgrade": { "keep": "bool" }
+			"upgrade": { "keep": "bool" },
+			"cancel": { },
+			"save": { "proxy": "str", "api": "str", "token": "str" }
 		}
-		EOF
+		EOT
 		;;
 	call)
 		case "$2" in
 			status) exec /usr/libexec/ota status ;;
 			check)  exec /usr/libexec/ota check ;;
+			cancel) exec /usr/libexec/ota cancel ;;
 			upgrade)
 				json_init
 				json_load "$(cat)"
@@ -25,6 +28,19 @@ case "$1" in
 					*)      keep=0 ;;
 				esac
 				exec /usr/libexec/ota start "$keep"
+				;;
+			save)
+				json_init
+				json_load "$(cat)"
+				json_get_var proxy proxy
+				json_get_var api api
+				json_get_var token token
+				uci -q get ota.main >/dev/null 2>&1 || uci -q set ota.main=ota
+				uci -q set ota.main.proxy="$proxy"
+				uci -q set ota.main.api="$api"
+				[ -n "$token" ] && uci -q set ota.main.token="$token"
+				uci -q commit ota
+				printf '{"ok":true}\n'
 				;;
 			*)
 				printf '{"ok":false,"error":"unknown method"}\n'

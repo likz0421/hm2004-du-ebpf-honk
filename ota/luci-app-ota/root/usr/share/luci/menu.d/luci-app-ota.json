@@ -1,13 +1,15 @@
 {
 	"admin/system/ota": {
 		"title": "在线升级",
-		"order": 60,
+		"order": 65,
 		"action": {
 			"type": "view",
 			"path": "ota/overview"
 		},
 		"depends": {
-			"acl": [ "luci-app-ota" ]
+			"acl": [
+				"luci-app-ota"
+			]
 		}
 	}
 }

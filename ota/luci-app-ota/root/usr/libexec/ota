@@ -1,31 +1,38 @@
 #!/bin/sh
 # ================================================================
-# HM2004-DU 在线升级后端
+# HM2004-DU 在线升级后端（v2）
 #
-#   check   —— 查 GitHub Release，找出本机型可用的 sysupgrade 镜像
-#   start   —— 检查内存后后台开始下载+校验+升级（sysupgrade）
-#   status  —— 给 LuCI 轮询的状态
+#   check   —— 查 GitHub Release（可配 API 镜像 / Token）
+#   start   —— 检查内存后后台下载+校验+sysupgrade（可配下载代理）
+#   status  —— 给 LuCI 轮询的状态（含进度、代理/Token 是否配置）
+#   cancel  —— 取消下载
 #
-# 镜像下载到 /tmp（tmpfs，RAM）：40MB 左右，加校验峰值要求
-# 可用内存 ≥ 110MB，否则直接拒绝，绝不在内存紧张时动 flash。
+# 国内网络：GitHub API 与 Release 资产都可能不稳，可在页面里配
+#   · API 地址：默认 https://api.github.com，可换镜像
+#   · 下载代理：如 https://ghfast.top/ ，下载时拼成 <代理>/<原始 URL>
+#   · Token：可选的 GitHub PAT，把匿名 60 次/小时提到 5000 次/小时
+# 无论走不走代理，都按 Release 给的 sha256 校验，代理篡改会被拒绝。
 # ================================================================
 REPO="likz0421/hm2004-du-ebpf-honk"
-API="https://api.github.com/repos/$REPO/releases?per_page=20"
 DIR="/tmp/ota"
 IMG="$DIR/sysupgrade.itb"
 RELEASES="$DIR/releases.json"
 LATEST="$DIR/latest.json"
 STATE="$DIR/state.json"
 LOG="$DIR/ota.log"
+PIDFILE="$DIR/pid"
 VERFILE="/etc/ota.version"
 PROFILE="h3c_hm2004-du"
-MIN_KB=112640          # 110 MiB
+MIN_KB=112640
 PATTERN="h3c_hm2004-du.*sysupgrade"
 
 mkdir -p "$DIR"
 
+uci_get() { uci -q get "ota.main.$1" 2>/dev/null; }
+api_base() { a=$(uci_get api); [ -n "$a" ] || a="https://api.github.com"; printf '%s' "${a%/}"; }
+dl_proxy() { p=$(uci_get proxy); printf '%s' "${p%/}"; }
+
 cur_ver() {
-	# shellcheck disable=SC1091
 	(. /etc/openwrt_release 2>/dev/null; printf '%s' "${DISTRIB_DESCRIPTION:-unknown}")
 }
 
@@ -33,15 +40,23 @@ free_kb() { awk '/^MemAvailable:/{print $2}' /proc/meminfo; }
 
 set_state() { printf '%s\n' "$1" >"$STATE"; }
 
-json_str() { # 极简 JSON 字符串转义（只处理引号与反斜杠）
-	printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g'
+json_str() { printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g'; }
+
+http_get() { # http_get <url> <out>
+	if [ -n "$(uci_get token)" ]; then
+		curl -fsSL --max-time 25 -H 'Accept: application/vnd.github+json' \
+			-H "Authorization: Bearer $(uci_get token)" "$1" -o "$2" 2>"$LOG"
+	else
+		curl -fsSL --max-time 25 -H 'Accept: application/vnd.github+json' "$1" -o "$2" 2>"$LOG"
+	fi
 }
 
 do_check() {
 	rm -f "$LATEST"
-	if ! curl -fsSL --max-time 25 -H 'Accept: application/vnd.github+json' \
-		"$API" -o "$RELEASES" 2>"$LOG"; then
-		printf '{"ok":false,"error":"GitHub API 访问失败（网络不通或被限流）"}\n'
+	api="$(api_base)/repos/$REPO/releases?per_page=20"
+
+	if ! http_get "$api" "$RELEASES"; then
+		printf '{"ok":false,"error":"GitHub API 访问失败：可在本页配置 API 镜像或下载代理后重试"}\n'
 		return 0
 	fi
 
@@ -59,7 +74,6 @@ do_check() {
 	fi
 
 	installed=$(cat "$VERFILE" 2>/dev/null)
-	latest=$(jq -r '.tag' "$LATEST")
 	jq -c --arg cur "$(cur_ver)" --arg ins "$installed" --argjson free "$(free_kb)" \
 		'{ ok: true, current: $cur, installed_tag: $ins,
 		   latest_tag: .tag, name: .name, size: .size, digest: .digest,
@@ -68,31 +82,45 @@ do_check() {
 }
 
 do_status() {
-	if [ -s "$STATE" ]; then
-		cat "$STATE"
-	else
-		printf '{"state":"idle"}\n'
-	fi | jq -c --arg cur "$(cur_ver)" --arg ins "$(cat "$VERFILE" 2>/dev/null)" \
-		--argjson free "$(free_kb)" \
-		'. + { current: $cur, installed_tag: $ins, free_kb: $free }' 2>/dev/null ||
+	st='{"state":"idle"}'
+	[ -s "$STATE" ] && st=$(cat "$STATE")
+	pct=0
+	if [ -s "$LATEST" ] && [ -f "$IMG" ]; then
+		total=$(jq -r '.size // 0' "$LATEST" 2>/dev/null)
+		got=$(wc -c <"$IMG" 2>/dev/null || echo 0)
+		[ "${total:-0}" -gt 0 ] && pct=$((got * 100 / total))
+	fi
+	tok=0
+	[ -n "$(uci_get token)" ] && tok=1
+	printf '%s\n' "$st" | jq -c \
+		--arg cur "$(cur_ver)" --arg ins "$(cat "$VERFILE" 2>/dev/null)" \
+		--argjson free "$(free_kb)" --argjson pct "$pct" --argjson tok "$tok" \
+		--arg proxy "$(uci_get proxy)" --arg api "$(api_base)" \
+		'. + { current: $cur, installed_tag: $ins, free_kb: $free,
+		       progress: $pct, token_set: ($tok == 1),
+		       proxy: $proxy, api: $api }' 2>/dev/null ||
 		printf '{"state":"idle","current":"%s"}\n' "$(json_str "$(cur_ver)")"
 }
 
 worker() { # worker <keep 0|1>
 	keep="$1"
+	echo $$ >"$PIDFILE"
+	trap 'rm -f "$PIDFILE"' EXIT
 	set_state '{"state":"downloading","progress":0}'
 
 	url=$(jq -r '.url // empty' "$LATEST" 2>/dev/null)
 	size=$(jq -r '.size // 0' "$LATEST" 2>/dev/null)
 	digest=$(jq -r '.digest // empty' "$LATEST" 2>/dev/null)
 	tag=$(jq -r '.tag // empty' "$LATEST" 2>/dev/null)
-
 	[ -n "$url" ] || { set_state '{"state":"error","error":"没有可下载的版本"}'; return 1; }
+
+	p=$(dl_proxy)
+	[ -n "$p" ] && url="$p/$url"
 
 	rm -f "$IMG"
 	if ! curl -fL --retry 3 --retry-delay 3 --connect-timeout 20 \
 		-o "$IMG" "$url" >>"$LOG" 2>&1; then
-		set_state '{"state":"error","error":"下载失败，详见 /tmp/ota/ota.log"}'
+		set_state '{"state":"error","error":"下载失败（详见 /tmp/ota/ota.log），可配置下载代理后重试"}'
 		rm -f "$IMG"
 		return 1
 	fi
@@ -112,6 +140,10 @@ worker() { # worker <keep 0|1>
 			rm -f "$IMG"
 			return 1
 		fi
+	else
+		set_state '{"state":"error","error":"Release 没提供 sha256，拒绝安装"}'
+		rm -f "$IMG"
+		return 1
 	fi
 
 	printf '%s\n' "$tag" >"$VERFILE"
@@ -126,7 +158,6 @@ worker() { # worker <keep 0|1>
 
 do_start() {
 	keep="${1:-1}"
-
 	[ -s "$LATEST" ] || { printf '{"ok":false,"error":"请先检查更新"}\n'; return 0; }
 
 	kb=$(free_kb)
@@ -140,10 +171,19 @@ do_start() {
 	printf '{"ok":true,"started":true}\n'
 }
 
+do_cancel() {
+	[ -f "$PIDFILE" ] && kill "$(cat "$PIDFILE")" 2>/dev/null
+	pkill -f "curl.*sysupgrade.itb" 2>/dev/null
+	rm -f "$IMG" "$PIDFILE"
+	set_state '{"state":"idle"}'
+	printf '{"ok":true}\n'
+}
+
 case "$1" in
 	check)  do_check ;;
 	start)  do_start "${2:-1}" ;;
 	status) do_status ;;
+	cancel) do_cancel ;;
 	worker) worker "${2:-1}" ;;
-	*)      printf '{"ok":false,"error":"usage: ota check|start|status"}\n' ;;
+	*)      printf '{"ok":false,"error":"usage: ota check|start|status|cancel"}\n' ;;
 esac

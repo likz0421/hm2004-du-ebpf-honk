@@ -4,12 +4,14 @@
 		"read": {
 			"ubus": {
 				"luci.ota": [ "status", "check" ]
-			}
+			},
+			"uci": [ "ota" ]
 		},
 		"write": {
 			"ubus": {
-				"luci.ota": [ "upgrade" ]
-			}
+				"luci.ota": [ "upgrade", "cancel", "save" ]
+			},
+			"uci": [ "ota" ]
 		}
 	}
 }
