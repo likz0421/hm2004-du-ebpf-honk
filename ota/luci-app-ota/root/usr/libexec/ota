@@ -24,7 +24,6 @@ PIDFILE="$DIR/pid"
 VERFILE="/etc/ota.version"
 PROFILE="h3c_hm2004-du"
 MIN_KB=112640
-PATTERN="h3c_hm2004-du.*sysupgrade"
 
 mkdir -p "$DIR"
 
@@ -60,13 +59,22 @@ do_check() {
 		return 0
 	fi
 
-	jq -c --arg pat "$PATTERN" '
+	# ⚠ 不要用 test()/match()：OpenWrt 默认 jq 是 --without-oniguruma 编译的，
+	#    正则函数不存在，jq 会直接报错退出（构建里就是踩了这个坑）。
+	#    contains() 是纯字符串函数，任何 jq 构建都有。
+	if ! jq -e 'type == "array"' "$RELEASES" >/dev/null 2>&1; then
+		snip=$(head -c 160 "$RELEASES" 2>/dev/null | tr '\n' ' ' | sed 's/"/\"/g')
+		printf '{"ok":false,"error":"GitHub API 返回异常：%s"}\n' "$snip"
+		return 0
+	fi
+
+	jq -c '
 		[ .[] | . as $r | .assets[]?
-		  | select(.name | test($pat))
+		  | select((.name | contains("h3c_hm2004-du")) and (.name | contains("sysupgrade")))
 		  | { tag: $r.tag_name, name: .name, size: .size,
 		      digest: (.digest // ""), url: .browser_download_url,
 		      published: $r.published_at } ]
-		| .[0] // empty' "$RELEASES" >"$LATEST" 2>/dev/null
+		| sort_by(.published) | reverse | .[0] // empty' "$RELEASES" >"$LATEST" 2>"$LOG"
 
 	if [ ! -s "$LATEST" ]; then
 		printf '{"ok":false,"error":"Release 里没有 %s 的 sysupgrade 镜像"}\n' "$PROFILE"
