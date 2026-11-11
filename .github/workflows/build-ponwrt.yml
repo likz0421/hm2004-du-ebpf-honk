@@ -42,6 +42,10 @@ env:
   FTTR_LUCI_BRANCH: ${{ github.event.inputs.fttr_luci_branch || 'main' }}
 
 on:
+  # push v* tag 即自动构建并发版（每次 tag 一个独立 Release）
+  push:
+    tags:
+      - 'v*'
   repository_dispatch:
   workflow_dispatch:
     inputs:
@@ -144,9 +148,9 @@ on:
           - 'true'
           - 'false'
       fw_author:
-        description: '覆盖固件版本后缀的作者名（LuCI 概览页「固件版本」）。留空 = qwe'
+        description: '覆盖固件版本后缀的作者名（LuCI 概览页「固件版本」）。留空 = likz'
         required: false
-        default: 'qwe'
+        default: 'likz'
       upload_release:
         description: '固件发布到 Release（false 则只传 Artifact）'
         required: false
@@ -1459,10 +1463,13 @@ jobs:
             exit 0
           fi
 
-          # 固定 tag：机型 + 分支，不含时间戳、不含作者
-          # 同一机型/分支再次编译时，softprops/action-gh-release 会更新
-          # 这个已存在的 Release（同名固件自动覆盖），不会新建版本。
-          RELEASE_TAG=$(echo "${DEVICE_NAME}-${REPO_BRANCH}" | sed 's/[^a-zA-Z0-9._-]/-/g')
+          # tag 触发（v*）时：用推上来的 tag 本身做 Release tag，一次 tag 一个版本；
+          # 手动/定时触发时：用「机型-分支」滚动页，重复构建覆盖同名资产。
+          if [ "${GITHUB_EVENT_NAME}" = "push" ]; then
+            RELEASE_TAG=$(echo "${GITHUB_REF_NAME}" | sed 's/[^a-zA-Z0-9._-]/-/g')
+          else
+            RELEASE_TAG=$(echo "${DEVICE_NAME}-${REPO_BRANCH}" | sed 's/[^a-zA-Z0-9._-]/-/g')
+          fi
           echo "release_tag=${RELEASE_TAG}" >> "$GITHUB_OUTPUT"
 
           touch release.txt
@@ -1487,7 +1494,11 @@ jobs:
             echo '```'
             echo ""
             echo "---"
-            echo "> 本 Release 为滚动发布页，仅保留最新一次编译产物。"
+            if [ "${GITHUB_EVENT_NAME}" = "push" ]; then
+              echo "> 本 Release 对应 tag \`${GITHUB_REF_NAME}\`，产物固定保存。"
+            else
+              echo "> 本 Release 为滚动发布页，仅保留最新一次编译产物。"
+            fi
             echo "> 安装前请用 AN758x-Stock2UBI 备份原厂 flash，刷机后恢复 PON/校准数据。"
           } >> release.txt
           echo "status=success" >> "$GITHUB_OUTPUT"
