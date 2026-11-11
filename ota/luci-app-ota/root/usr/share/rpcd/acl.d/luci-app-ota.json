@@ -1,0 +1,15 @@
+{
+	"luci-app-ota": {
+		"description": "在线升级（OTA）：检查、下载并安装 sysupgrade 镜像",
+		"read": {
+			"ubus": {
+				"luci.ota": [ "status", "check" ]
+			}
+		},
+		"write": {
+			"ubus": {
+				"luci.ota": [ "upgrade" ]
+			}
+		}
+	}
+}

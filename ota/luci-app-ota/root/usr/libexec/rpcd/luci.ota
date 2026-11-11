@@ -1,0 +1,34 @@
+#!/bin/sh
+# rpcd 后端：把 /usr/libexec/ota 暴露成 ubus 对象 luci.ota
+. /usr/share/libubox/jshn.sh
+
+case "$1" in
+	list)
+		cat <<-'EOF'
+		{
+			"status": { },
+			"check": { },
+			"upgrade": { "keep": "bool" }
+		}
+		EOF
+		;;
+	call)
+		case "$2" in
+			status) exec /usr/libexec/ota status ;;
+			check)  exec /usr/libexec/ota check ;;
+			upgrade)
+				json_init
+				json_load "$(cat)"
+				json_get_var keep keep
+				case "$keep" in
+					1|true) keep=1 ;;
+					*)      keep=0 ;;
+				esac
+				exec /usr/libexec/ota start "$keep"
+				;;
+			*)
+				printf '{"ok":false,"error":"unknown method"}\n'
+				;;
+		esac
+		;;
+esac

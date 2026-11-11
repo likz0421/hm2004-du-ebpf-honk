@@ -110,6 +110,19 @@ if [ "$ADD_LUCI_APP" = "true" ]; then
 fi
 
 # =========================================================
+# luci-app-ota —— 在线升级（本仓库自带包）
+# 查 GitHub Release → 下载到 /tmp（RAM）→ 校验 sha256 与机型 → sysupgrade
+# =========================================================
+if [ -d "$GITHUB_WORKSPACE/ota/luci-app-ota" ]; then
+  rm -rf "$PKG_DIR/luci-app-ota"
+  cp -r "$GITHUB_WORKSPACE/ota/luci-app-ota" "$PKG_DIR/"
+  echo "✅ 已拷贝: luci-app-ota"
+else
+  echo "::error::ota/luci-app-ota 不存在，OTA 页面不会进固件"
+  exit 1
+fi
+
+# =========================================================
 # h3c-fmcs / openwrt-fttr / h3c-fmcs-firmware —— FTTR 后端三件套 ★HM2004-DU 专属
 # 源：qwe-qaq/openwrt-fttr（私有仓库）
 # ⚠ 这里必须用「裸 URL」：凭证由 workflow 的 GIT_ASKPASS 在认证时回调注入，
@@ -576,6 +589,7 @@ if [ -n "$(ls -A "$PKG_DIR" 2>/dev/null)" ]; then
   [ "$ADD_AIROHA_NPU" = "true" ] && REQUIRED="$REQUIRED luci-app-airoha-npu"
   if [ "$ADD_LUCI_APP" = "true" ]; then
     REQUIRED="$REQUIRED luci-app-natmode luci-app-pon-status luci-app-igmpproxy"
+    REQUIRED="$REQUIRED luci-app-ota"
   fi
 
   # 与 configs/an7581.config / an7583.config 里 =y 的包一一对应。

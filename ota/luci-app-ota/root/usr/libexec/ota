@@ -1,0 +1,149 @@
+#!/bin/sh
+# ================================================================
+# HM2004-DU 在线升级后端
+#
+#   check   —— 查 GitHub Release，找出本机型可用的 sysupgrade 镜像
+#   start   —— 检查内存后后台开始下载+校验+升级（sysupgrade）
+#   status  —— 给 LuCI 轮询的状态
+#
+# 镜像下载到 /tmp（tmpfs，RAM）：40MB 左右，加校验峰值要求
+# 可用内存 ≥ 110MB，否则直接拒绝，绝不在内存紧张时动 flash。
+# ================================================================
+REPO="likz0421/hm2004-du-ebpf-honk"
+API="https://api.github.com/repos/$REPO/releases?per_page=20"
+DIR="/tmp/ota"
+IMG="$DIR/sysupgrade.itb"
+RELEASES="$DIR/releases.json"
+LATEST="$DIR/latest.json"
+STATE="$DIR/state.json"
+LOG="$DIR/ota.log"
+VERFILE="/etc/ota.version"
+PROFILE="h3c_hm2004-du"
+MIN_KB=112640          # 110 MiB
+PATTERN="h3c_hm2004-du.*sysupgrade"
+
+mkdir -p "$DIR"
+
+cur_ver() {
+	# shellcheck disable=SC1091
+	(. /etc/openwrt_release 2>/dev/null; printf '%s' "${DISTRIB_DESCRIPTION:-unknown}")
+}
+
+free_kb() { awk '/^MemAvailable:/{print $2}' /proc/meminfo; }
+
+set_state() { printf '%s\n' "$1" >"$STATE"; }
+
+json_str() { # 极简 JSON 字符串转义（只处理引号与反斜杠）
+	printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g'
+}
+
+do_check() {
+	rm -f "$LATEST"
+	if ! curl -fsSL --max-time 25 -H 'Accept: application/vnd.github+json' \
+		"$API" -o "$RELEASES" 2>"$LOG"; then
+		printf '{"ok":false,"error":"GitHub API 访问失败（网络不通或被限流）"}\n'
+		return 0
+	fi
+
+	jq -c --arg pat "$PATTERN" '
+		[ .[] | . as $r | .assets[]?
+		  | select(.name | test($pat))
+		  | { tag: $r.tag_name, name: .name, size: .size,
+		      digest: (.digest // ""), url: .browser_download_url,
+		      published: $r.published_at } ]
+		| .[0] // empty' "$RELEASES" >"$LATEST" 2>/dev/null
+
+	if [ ! -s "$LATEST" ]; then
+		printf '{"ok":false,"error":"Release 里没有 %s 的 sysupgrade 镜像"}\n' "$PROFILE"
+		return 0
+	fi
+
+	installed=$(cat "$VERFILE" 2>/dev/null)
+	latest=$(jq -r '.tag' "$LATEST")
+	jq -c --arg cur "$(cur_ver)" --arg ins "$installed" --argjson free "$(free_kb)" \
+		'{ ok: true, current: $cur, installed_tag: $ins,
+		   latest_tag: .tag, name: .name, size: .size, digest: .digest,
+		   url: .url, published: .published,
+		   has_update: ($ins != .tag), free_kb: $free }' "$LATEST"
+}
+
+do_status() {
+	if [ -s "$STATE" ]; then
+		cat "$STATE"
+	else
+		printf '{"state":"idle"}\n'
+	fi | jq -c --arg cur "$(cur_ver)" --arg ins "$(cat "$VERFILE" 2>/dev/null)" \
+		--argjson free "$(free_kb)" \
+		'. + { current: $cur, installed_tag: $ins, free_kb: $free }' 2>/dev/null ||
+		printf '{"state":"idle","current":"%s"}\n' "$(json_str "$(cur_ver)")"
+}
+
+worker() { # worker <keep 0|1>
+	keep="$1"
+	set_state '{"state":"downloading","progress":0}'
+
+	url=$(jq -r '.url // empty' "$LATEST" 2>/dev/null)
+	size=$(jq -r '.size // 0' "$LATEST" 2>/dev/null)
+	digest=$(jq -r '.digest // empty' "$LATEST" 2>/dev/null)
+	tag=$(jq -r '.tag // empty' "$LATEST" 2>/dev/null)
+
+	[ -n "$url" ] || { set_state '{"state":"error","error":"没有可下载的版本"}'; return 1; }
+
+	rm -f "$IMG"
+	if ! curl -fL --retry 3 --retry-delay 3 --connect-timeout 20 \
+		-o "$IMG" "$url" >>"$LOG" 2>&1; then
+		set_state '{"state":"error","error":"下载失败，详见 /tmp/ota/ota.log"}'
+		rm -f "$IMG"
+		return 1
+	fi
+
+	got=$(wc -c <"$IMG" 2>/dev/null || echo 0)
+	if [ "$size" != "0" ] && [ "$got" != "$size" ]; then
+		set_state "{\"state\":\"error\",\"error\":\"大小不符：$got/$size\"}"
+		rm -f "$IMG"
+		return 1
+	fi
+
+	if [ -n "$digest" ]; then
+		want=${digest#sha256:}
+		sum=$(sha256sum "$IMG" | cut -d' ' -f1)
+		if [ "$want" != "$sum" ]; then
+			set_state '{"state":"error","error":"sha256 校验失败，已删除镜像"}'
+			rm -f "$IMG"
+			return 1
+		fi
+	fi
+
+	printf '%s\n' "$tag" >"$VERFILE"
+	set_state '{"state":"verified","progress":100}'
+
+	if [ "$keep" = "1" ]; then
+		sysupgrade -k "$IMG" >>"$LOG" 2>&1
+	else
+		sysupgrade -n "$IMG" >>"$LOG" 2>&1
+	fi
+}
+
+do_start() {
+	keep="${1:-1}"
+
+	[ -s "$LATEST" ] || { printf '{"ok":false,"error":"请先检查更新"}\n'; return 0; }
+
+	kb=$(free_kb)
+	if [ "${kb:-0}" -lt "$MIN_KB" ]; then
+		printf '{"ok":false,"error":"可用内存不足：%s KB < %s KB，请先关闭插件后重试"}\n' "$kb" "$MIN_KB"
+		return 0
+	fi
+
+	set_state '{"state":"queued"}'
+	( worker "$keep" >/dev/null 2>&1 & )
+	printf '{"ok":true,"started":true}\n'
+}
+
+case "$1" in
+	check)  do_check ;;
+	start)  do_start "${2:-1}" ;;
+	status) do_status ;;
+	worker) worker "${2:-1}" ;;
+	*)      printf '{"ok":false,"error":"usage: ota check|start|status"}\n' ;;
+esac
