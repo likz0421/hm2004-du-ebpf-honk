@@ -66,9 +66,12 @@ return view.extend({
 			}
 			tdLatest.textContent = r.latest_tag || '—';
 			tdSize.textContent = fmtSize(r.size);
+			// 已装 tag 与最新 tag 一致 → 视为最新，禁用"下载并升级"
+			var same = (r.installed_tag === r.latest_tag);
+			btnUp.disabled = !r.has_update || same;
 			setMsg(r.has_update
 				? _('发现新版本：%s').format(r.latest_tag)
-				: _('已是最新版本（%s）').format(r.latest_tag), false);
+				: _('已是最新版本（%s）').format(r.installed_tag || r.latest_tag), false);
 		}
 
 		function applyStatus(r) {

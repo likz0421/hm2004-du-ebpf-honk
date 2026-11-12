@@ -32,6 +32,12 @@ api_base() { a=$(uci_get api); [ -n "$a" ] || a="https://api.github.com"; printf
 dl_proxy() { p=$(uci_get proxy); printf '%s' "${p%/}"; }
 
 cur_ver() {
+	# 返回固件自带的版本标识（VERSION_CODE），如 v2026.11.13。
+	# sysupgrade 会覆盖 /etc/openwrt_release，所以这个值来自新固件本身，重启后不会丢。
+	(. /etc/openwrt_release 2>/dev/null; printf '%s' "${VERSION_CODE:-unknown}")
+}
+
+fw_ver() {
 	(. /etc/openwrt_release 2>/dev/null; printf '%s' "${DISTRIB_DESCRIPTION:-unknown}")
 }
 
@@ -81,12 +87,14 @@ do_check() {
 		return 0
 	fi
 
+	# 当前版本 = 固件自带的 VERSION_CODE（如 v2026.11.13），重启不丢。
+	# 已安装升级标签 = /etc/ota.version（仅记录"本次开机后是否用 OTA 刷过"，仅供参考）。
 	installed=$(cat "$VERFILE" 2>/dev/null)
 	jq -c --arg cur "$(cur_ver)" --arg ins "$installed" --argjson free "$(free_kb)" \
 		'{ ok: true, current: $cur, installed_tag: $ins,
 		   latest_tag: .tag, name: .name, size: .size, digest: .digest,
 		   url: .url, published: .published,
-		   has_update: ($ins != .tag), free_kb: $free }' "$LATEST"
+		   has_update: ($cur != .tag), free_kb: $free }' "$LATEST"
 }
 
 do_status() {
@@ -101,10 +109,10 @@ do_status() {
 	tok=0
 	[ -n "$(uci_get token)" ] && tok=1
 	printf '%s\n' "$st" | jq -c \
-		--arg cur "$(cur_ver)" --arg ins "$(cat "$VERFILE" 2>/dev/null)" \
+		--arg cur "$(fw_ver)" --arg tag "$(cur_ver)" --arg ins "$(cat "$VERFILE" 2>/dev/null)" \
 		--argjson free "$(free_kb)" --argjson pct "$pct" --argjson tok "$tok" \
 		--arg proxy "$(uci_get proxy)" --arg api "$(api_base)" \
-		'. + { current: $cur, installed_tag: $ins, free_kb: $free,
+		'. + { current: $cur, firmware_tag: $tag, installed_tag: $ins, free_kb: $free,
 		       progress: $pct, token_set: ($tok == 1),
 		       proxy: $proxy, api: $api }' 2>/dev/null ||
 		printf '{"state":"idle","current":"%s"}\n' "$(json_str "$(cur_ver)")"
