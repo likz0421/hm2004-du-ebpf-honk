@@ -194,6 +194,33 @@ if [ "$ADD_FTTR" = "true" ] && [ "$FTTR_PROFILE" = "h3c_hm2004-du" ]; then
     echo "✅ 已拷贝: $p → $dst  (版本 $(grep -m1 '^PKG_VERSION' "$PKG_DIR/$dst/Makefile" 2>/dev/null | sed 's/PKG_VERSION:=//'))"
   done
   rm -rf "$FTTR_FEED_TMP"
+
+  # =========================================================
+  # ★ 确保 fttrd 编译时启用全部 device feature（fiberhome / realtek 等）
+  #
+  # 根因：fttr Makefile 的 RUST_PKG_FEATURES 用 $(if $(CONFIG_FTTR_DEVICE_X),...)
+  #   从 auto.conf 读 CONFIG 符号决定是否传给 cargo。实测发现即使 .config 里
+  #   CONFIG_FTTR_DEVICE_FIBERHOME=y，编译出的 fttrd 也缺 fiberhome/realtek
+  #   （capability 列表只有 hl202/hwtc/scty/star/zte），用户在界面选这些
+  #   adapter 就报 "Selected OMCI adapter is unavailable in this build"。
+  # 修复：在 RUST_PKG_FEATURES 求值前用 ?= 给这些符号兜底默认 y。
+  #   ?= 只在变量未定义时赋值——auto.conf 有值就用 auto.conf 的，没有就兜底 y，
+  #   不影响用户显式 =n 关闭。
+  # =========================================================
+  FTTR_MK="$PKG_DIR/openwrt-fttr/Makefile"
+  if [ -f "$FTTR_MK" ] && grep -q '^RUST_PKG_FEATURES:=' "$FTTR_MK"; then
+    if ! grep -q 'CONFIG_FTTR_DEVICE_FIBERHOME?=' "$FTTR_MK"; then
+      sed -i '/^RUST_PKG_FEATURES:=/i\
+# 兜底：确保全部 device feature 传给 cargo（见上方注释）\
+CONFIG_FTTR_DEVICE_FIBERHOME?=y\
+CONFIG_FTTR_DEVICE_REALTEK?=y' "$FTTR_MK"
+      echo "✅ 已给 openwrt-fttr/Makefile 打 device feature 兜底补丁"
+    fi
+    # 断言：补丁必须生效
+    grep -q 'CONFIG_FTTR_DEVICE_FIBERHOME?=' "$FTTR_MK" || {
+      echo "::error::openwrt-fttr/Makefile device feature 兜底补丁未生效"; exit 1
+    }
+  fi
 fi
 
 # =========================================================
