@@ -162,7 +162,7 @@ return view.extend({
 				]),
 				bar,
 				E('p', { 'class': 'cbi-value-description' }, [
-					_('升级包先下载到内存（约 40 MB），至少需要 110 MB 可用内存；内存不足请先关闭插件。')
+					_('升级包先下载到内存（按升级包大小 + 64 MB 余量动态检查，不足会拒绝开始）；下载与写入期间请保持供电，校验通过后不可取消。')
 				]),
 				E('div', { 'class': 'cbi-value' }, [
 					E('label', { 'class': 'cbi-value-title' }, [ _('保留配置') ]),

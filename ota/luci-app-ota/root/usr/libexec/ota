@@ -43,6 +43,11 @@ fw_ver() {
 
 free_kb() { awk '/^MemAvailable:/{print $2}' /proc/meminfo; }
 
+# 升级 worker 是否还活着（PIDFILE 存在且进程可发信号）
+worker_alive() {
+	[ -f "$PIDFILE" ] && kill -0 "$(cat "$PIDFILE" 2>/dev/null)" 2>/dev/null
+}
+
 set_state() { printf '%s\n' "$1" >"$STATE"; }
 
 json_str() { printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g'; }
@@ -90,7 +95,9 @@ do_check() {
 	# 当前版本 = 固件自带的 VERSION_CODE（如 v2026.11.13），重启不丢。
 	# 已安装升级标签 = /etc/ota.version（仅记录"本次开机后是否用 OTA 刷过"，仅供参考）。
 	installed=$(cat "$VERFILE" 2>/dev/null)
-	jq -c --arg cur "$(cur_ver)" --arg ins "$installed" --argjson free "$(free_kb)" \
+	free=$(free_kb)
+	[ -n "$free" ] || free=0
+	jq -c --arg cur "$(cur_ver)" --arg ins "$installed" --argjson free "$free" \
 		'{ ok: true, current: $cur, installed_tag: $ins,
 		   latest_tag: .tag, name: .name, size: .size, digest: .digest,
 		   url: .url, published: .published,
@@ -100,6 +107,17 @@ do_check() {
 do_status() {
 	st='{"state":"idle"}'
 	[ -s "$STATE" ] && st=$(cat "$STATE")
+	# 卡死的"下载中/排队中"自愈：worker 已不在（被 OOM 杀、异常退出）时别让界面永远转圈
+	case "$st" in
+		*'"downloading"'*|*'"queued"'*)
+			worker_alive || {
+				st='{"state":"error","error":"上次升级任务异常中断，请重新检查更新"}'
+				set_state "$st"
+			}
+			;;
+	esac
+	free=$(free_kb)
+	[ -n "$free" ] || free=0
 	pct=0
 	if [ -s "$LATEST" ] && [ -f "$IMG" ]; then
 		total=$(jq -r '.size // 0' "$LATEST" 2>/dev/null)
@@ -110,7 +128,7 @@ do_status() {
 	[ -n "$(uci_get token)" ] && tok=1
 	printf '%s\n' "$st" | jq -c \
 		--arg cur "$(fw_ver)" --arg tag "$(cur_ver)" --arg ins "$(cat "$VERFILE" 2>/dev/null)" \
-		--argjson free "$(free_kb)" --argjson pct "$pct" --argjson tok "$tok" \
+		--argjson free "$free" --argjson pct "$pct" --argjson tok "$tok" \
 		--arg proxy "$(uci_get proxy)" --arg api "$(api_base)" \
 		'. + { current: $cur, firmware_tag: $tag, installed_tag: $ins, free_kb: $free,
 		       progress: $pct, token_set: ($tok == 1),
@@ -134,7 +152,10 @@ worker() { # worker <keep 0|1>
 	[ -n "$p" ] && url="$p/$url"
 
 	rm -f "$IMG"
+	# --speed-limit/--speed-time：传输低于 1KB/s 持续 60s 视为断流中止（--retry 会接管重试），
+	# 防止代理在半途僵死导致界面永远停在"下载中"。
 	if ! curl -fL --retry 3 --retry-delay 3 --connect-timeout 20 \
+		--speed-limit 1024 --speed-time 60 \
 		-o "$IMG" "$url" >>"$LOG" 2>&1; then
 		set_state '{"state":"error","error":"下载失败（详见 /tmp/ota/ota.log），可配置下载代理后重试"}'
 		rm -f "$IMG"
@@ -176,9 +197,22 @@ do_start() {
 	keep="${1:-1}"
 	[ -s "$LATEST" ] || { printf '{"ok":false,"error":"请先检查更新"}\n'; return 0; }
 
+	# 防重入：上一个任务还在（下载/校验中）时拒绝再次启动，
+	# 避免两个 worker 同时写同一个镜像文件（会互相截断/误删）。
+	if worker_alive; then
+		printf '{"ok":false,"error":"已有升级任务在进行中，请等待完成或先取消"}\n'
+		return 0
+	fi
+
+	# 内存要求按本次升级包大小动态算：包体 + 64MB 系统余量，且不低于 MIN_KB 兜底
+	size=$(jq -r '.size // 0' "$LATEST" 2>/dev/null)
+	[ -n "$size" ] || size=0
+	need=$(( size / 1024 + 65536 ))
+	[ "$need" -lt "$MIN_KB" ] && need=$MIN_KB
 	kb=$(free_kb)
-	if [ "${kb:-0}" -lt "$MIN_KB" ]; then
-		printf '{"ok":false,"error":"可用内存不足：%s KB < %s KB，请先关闭插件后重试"}\n' "$kb" "$MIN_KB"
+	[ -n "$kb" ] || kb=0
+	if [ "$kb" -lt "$need" ]; then
+		printf '{"ok":false,"error":"可用内存不足：%s KB < %s KB（升级包 %s KB + 64 MB 系统余量），请先关闭插件后重试"}\n' "$kb" "$need" "$(( size / 1024 ))"
 		return 0
 	fi
 
@@ -188,6 +222,11 @@ do_start() {
 }
 
 do_cancel() {
+	# 校验通过后已进入 sysupgrade 写入阶段：此刻删镜像有变砖风险，拒绝取消
+	if [ -s "$STATE" ] && grep -q '"verified"' "$STATE" 2>/dev/null; then
+		printf '{"ok":false,"error":"固件校验已通过、正在写入，无法取消；请保持供电等待重启"}\n'
+		return 0
+	fi
 	[ -f "$PIDFILE" ] && kill "$(cat "$PIDFILE")" 2>/dev/null
 	pkill -f "curl.*sysupgrade.itb" 2>/dev/null
 	rm -f "$IMG" "$PIDFILE"
