@@ -869,6 +869,33 @@ jobs:
           echo "✅ PON 关键包校验通过"
 
           # =========================================================
+          # FTTR device feature 符号追加（★2026-11-14）
+          #
+          # 现象：v2026.11.13/14/15 的 fttrd 二进制 capability 只有 5 个
+          #   device feature（hl202/hwtc/scty/star/zte），缺 fiberhome/realtek，
+          #   界面选这两个 adapter 报 "Selected OMCI adapter is unavailable"。
+          # 根因：fttr Makefile 的 RUST_PKG_FEATURES 直接 $(if $(CONFIG_FTTR_DEVICE_X),...)
+          #   读 .config 注入的 Makefile 变量（rules.mk 的 -include .config），而
+          #   PonWrt 树的 defconfig 实测会丢 CONFIG_FTTR_DEVICE_FIBERHOME/REALTEK
+          #   这两个符号（官方 OpenWrt 树不丢，已在复现环境对比确认）。
+          # 修复：本步骤是【唯一一次 defconfig】（见上方注释），defconfig 跑完后
+          #   直接把缺的符号追加进 .config——后续 make 不再跑 defconfig，
+          #   rules.mk 的 -include .config 直接读到追加值，RUST_PKG_FEATURES
+          #   即可拿到 device-fiberhome / device-realtek。
+          #   （diy-part1.sh 里对 fttr Makefile 的 ?=y 兜底是第二道保险。）
+          # =========================================================
+          if [ "${PROFILE}" = "h3c_hm2004-du" ] && grep -q "^CONFIG_PACKAGE_openwrt-fttr=y" .config; then
+            for s in FTTR_DEVICE_FIBERHOME FTTR_DEVICE_REALTEK; do
+              if ! grep -q "^CONFIG_${s}=y" .config; then
+                echo "CONFIG_${s}=y" >> .config
+                echo "::warning::defconfig 丢了 CONFIG_${s}，已追加进 .config"
+              fi
+            done
+            echo "=== 最终 .config 里 FTTR 符号 ==="
+            grep -E "^CONFIG_FTTR" .config || echo "::warning::.config 里没有任何 CONFIG_FTTR 符号"
+          fi
+
+          # =========================================================
           # honk 校验：eBPF 透明代理要 feed 注入 + BTF 内核，任一缺失都编不出
           # =========================================================
           HONK_MISS=""
