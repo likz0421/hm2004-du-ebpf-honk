@@ -1,0 +1,51 @@
+#!/bin/sh
+# WiFi 默认值（2026-11-14 用户定制）
+#   2.4G + 5G：SSID=hanzi，WPA2-PSK，密码 hanziwawa，出厂即启用
+#   （第三个频段的 radio 如存在则不动，保持出厂关闭）
+# 首次启动生效；保留配置升级时也会强制刷回该默认值。
+
+SSID='hanzi'
+KEY='hanziwawa'
+
+log() { logger -t wifi-hanzi "$@"; }
+
+# uci-defaults 可能在 wireless config 生成之前执行 —— 没生成就先生成
+if [ ! -f /etc/config/wireless ]; then
+	command -v wifi >/dev/null 2>&1 && wifi config >/dev/null 2>&1
+fi
+[ -f /etc/config/wireless ] || { log "未找到 /etc/config/wireless，跳过"; exit 0; }
+
+changed=0
+for sec in $(uci -q show wireless | sed -n 's/^wireless\.\([A-Za-z0-9_-]*\)=wifi-iface$/\1/p'); do
+	# 通过 iface 的 device 选项找到所属 radio，再按频段过滤
+	dev="$(uci -q get wireless.$sec.device 2>/dev/null)"
+	band="$(uci -q get wireless.$dev.band 2>/dev/null)"
+	hwmode="$(uci -q get wireless.$dev.hwmode 2>/dev/null)"
+
+	# 只处理 2.4G / 5G：band='2g'/'5g'（新版）或 hwmode='11g'/'11a'（旧版）
+	is_target=0
+	case "$band" in 2g|5g) is_target=1 ;; esac
+	[ -z "$band" ] && case "$hwmode" in 11g|11a) is_target=1 ;; esac
+	[ "$is_target" = "0" ] && continue
+
+	uci -q set wireless.$sec.ssid="$SSID"
+	uci -q set wireless.$sec.encryption='psk2'
+	uci -q set wireless.$sec.key="$KEY"
+	uci -q set wireless.$sec.network='lan'
+	uci -q delete wireless.$sec.disabled
+	changed=1
+	log "$sec：SSID=$SSID psk2 已启用"
+
+	# radio 级 disabled（出厂默认关）也一并打开
+	uci -q delete wireless.$dev.disabled
+done
+
+if [ "$changed" = "1" ]; then
+	uci -q commit wireless
+	wifi up 2>/dev/null
+	log "已提交 wireless 配置"
+else
+	log "未找到 2.4G/5G 接口，未做任何修改"
+fi
+
+exit 0

@@ -1,0 +1,26 @@
+#!/bin/sh
+# LAN IP + DHCP 默认值（2026-11-14 用户定制）
+#   LAN      : 10.1.1.1/24
+#   DHCP     : 开（ignore=0），dnsmasq 按请求顺序从池子里分配（先到先得）
+#   地址池   : 10.1.1.100 - 10.1.1.249，租期 12h
+# 首次启动生效；保留配置升级时也会强制刷回该默认值。
+
+log() { logger -t lan-dhcp "$@"; }
+
+# ---- LAN IP ----
+uci -q set network.lan.ipaddr='10.1.1.1'
+uci -q set network.lan.netmask='255.255.255.0'
+uci -q commit network
+log "LAN IP -> 10.1.1.1/24"
+
+# ---- DHCP 开关 + 顺序分配池 ----
+# ignore='0' 即 DHCP 开关开；dnsmasq 默认就是按请求顺序分配（无 MAC 绑定时先到先得），
+# start=100 从网段基址 +100 开始，limit=150 个地址。
+uci -q set dhcp.lan.ignore='0'
+uci -q set dhcp.lan.start='100'
+uci -q set dhcp.lan.limit='150'
+uci -q set dhcp.lan.leasetime='12h'
+uci -q commit dhcp
+log "DHCP 开（10.1.1.100-249，顺序分配，租期 12h）"
+
+exit 0
