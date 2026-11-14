@@ -32,9 +32,12 @@ api_base() { a=$(uci_get api); [ -n "$a" ] || a="https://api.github.com"; printf
 dl_proxy() { p=$(uci_get proxy); printf '%s' "${p%/}"; }
 
 cur_ver() {
-	# 返回固件自带的版本标识（VERSION_CODE），如 v2026.11.13。
-	# sysupgrade 会覆盖 /etc/openwrt_release，所以这个值来自新固件本身，重启后不会丢。
-	(. /etc/openwrt_release 2>/dev/null; printf '%s' "${VERSION_CODE:-unknown}")
+	# 从 /etc/openwrt_release 的描述里抓 v20xx.xx.xx 格式的 tag。
+	# 不依赖具体字段名（DISTRIB_RELEASE/DESCRIPTION 的排布随版本模板变过），
+	# 只要 diy-part2 + validate 的 VERSION_CODE 注入生效，tag 一定在描述串里。
+	# 旧固件（无 tag）返回空 → has_update=true 提示升级，行为正确。
+	sed -n "s/^DISTRIB_DESCRIPTION='\(.*\)'/\1/p" /etc/openwrt_release 2>/dev/null \
+		| grep -oE 'v20[0-9]{2}\.[0-9]{2}(\.[0-9]+)?' | head -1
 }
 
 fw_ver() {

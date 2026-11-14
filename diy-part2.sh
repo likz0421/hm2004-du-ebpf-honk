@@ -204,7 +204,10 @@ fi
 
 [ -z "$FW_BUILD_TIME" ] && FW_BUILD_TIME="$(TZ="${TZ:-Asia/Shanghai}" date '+%Y-%m-%d %H:%M')"
 
-VER_CODE="$(sed -n 's/^CONFIG_VERSION_CODE="\(.*\)"$/\1/p' .config 2>/dev/null || true)"
+# ★2026-11-15 修复：diy-part2 运行时 .config 还没生成（workflow 顺序：diy → 配置 → defconfig），
+# 老写法 sed .config 永远读空，导致 DISTRIB_DESCRIPTION 模板不含 %C、固件里没有版本 tag、
+# OTA 的版本对比失效。改为直接读 configs/ 下的机型配置（源头就是它）。
+VER_CODE="$(cat configs/*.config 2>/dev/null | sed -n 's/^CONFIG_VERSION_CODE="\(.*\)"$/\1/p' | head -1)"
 if [ -n "$VER_CODE" ]; then
   DESC_BODY='%D %V %C'
 else

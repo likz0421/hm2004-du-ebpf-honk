@@ -896,6 +896,29 @@ jobs:
           fi
 
           # =========================================================
+          # VERSION_CODE 注入（★2026-11-15，OTA 版本对比的命脉）
+          #
+          # CONFIG_VERSION_CODE 无 Kconfig default，make defconfig 会把它从
+          # .config 里丢掉（老仓库 sbe1v1k 时代踩过同一个坑）。丢掉后 %C 落回
+          # SNAPSHOT，固件 /etc/openwrt_release 里没有版本 tag，OTA 的
+          # cur_ver() 永远读空 → 永远提示有更新。
+          # 修复：本步骤是唯一一次 defconfig，跑完后以 tag 名（唯一真相源）
+          #   强制写入 .config。diy-part2.sh 已把 DISTRIB_DESCRIPTION 模板
+          #   改为含 %C（从 configs/*.config 读），两者配合后固件版本串 =
+          #   release tag，OTA 对比闭环。
+          # =========================================================
+          if [ -n "${GITHUB_REF_NAME}" ]; then
+            VTAG=$(echo "${GITHUB_REF_NAME}" | sed 's/[^a-zA-Z0-9._-]/-/g')
+            if grep -q '^CONFIG_VERSION_CODE=' .config; then
+              sed -i "s/^CONFIG_VERSION_CODE=.*/CONFIG_VERSION_CODE=\"$VTAG\"/" .config
+            else
+              echo "CONFIG_VERSION_CODE=\"$VTAG\"" >> .config
+            fi
+            echo "=== VERSION_CODE 注入结果 ==="
+            grep '^CONFIG_VERSION_CODE=' .config
+          fi
+
+          # =========================================================
           # honk 校验：eBPF 透明代理要 feed 注入 + BTF 内核，任一缺失都编不出
           # =========================================================
           HONK_MISS=""
