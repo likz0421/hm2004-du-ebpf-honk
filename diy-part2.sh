@@ -204,10 +204,21 @@ fi
 
 [ -z "$FW_BUILD_TIME" ] && FW_BUILD_TIME="$(TZ="${TZ:-Asia/Shanghai}" date '+%Y-%m-%d %H:%M')"
 
-# ★2026-11-15 修复：diy-part2 运行时 .config 还没生成（workflow 顺序：diy → 配置 → defconfig），
-# 老写法 sed .config 永远读空，导致 DISTRIB_DESCRIPTION 模板不含 %C、固件里没有版本 tag、
-# OTA 的版本对比失效。改为直接读 configs/ 下的机型配置（源头就是它）。
-VER_CODE="$(cat configs/*.config 2>/dev/null | sed -n 's/^CONFIG_VERSION_CODE="\(.*\)"$/\1/p' | head -1)"
+# ★2026-11-15 二次修复：VER_CODE 的来源链
+#   1. GITHUB_REF_NAME——tag 名，唯一真相源，workflow 环境变量必然存在
+#   2. $GITHUB_WORKSPACE/configs/*.config——仓库机型配置（绝对路径，本地跑也能用）
+#   3. .config——老逻辑兜底
+# 注意：diy-part2 跑在 openwrt/ 树里，相对路径 configs/ 是仓库目录，读不到
+#（v2026.11.20 就栽在这）。模板 %C 的实际值由编译期 version.mk 决定：
+# CONFIG_VERSION_CODE 在（validate 已 defconfig 后注入）→ %C=tag；
+# 不在 → %C 回落成 git revision（r0-xxx），这就是 v2026.11.14~19 的病灶。
+VER_CODE="${GITHUB_REF_NAME:-}"
+if [ -z "$VER_CODE" ]; then
+  VER_CODE="$(cat "${GITHUB_WORKSPACE:-$PWD/..}/configs/"*.config 2>/dev/null | sed -n 's/^CONFIG_VERSION_CODE="\?\([^"]*\)"\?$/\1/p' | head -1)"
+fi
+if [ -z "$VER_CODE" ]; then
+  VER_CODE="$(sed -n 's/^CONFIG_VERSION_CODE="\?\([^"]*\)"\?$/\1/p' .config 2>/dev/null | head -1)"
+fi
 if [ -n "$VER_CODE" ]; then
   DESC_BODY='%D %V %C'
 else
