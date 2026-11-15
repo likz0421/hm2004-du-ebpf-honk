@@ -97,8 +97,6 @@ def main():
     argon(ow)
     rtp2httpd(ow)
     geosite(ow)
-    # Build provenance must be generated after the source commit is known and then
-    # explicitly copied into the overlay; do not write a hidden, non-installed file here.
 
 
 if __name__ == "__main__":

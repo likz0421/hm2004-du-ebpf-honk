@@ -731,6 +731,11 @@ jobs:
           [ -d files/sbin ] && chmod +x files/sbin/* 2>/dev/null
           [ -d files/etc/uci-defaults ] && chmod +x files/etc/uci-defaults/* 2>/dev/null
 
+          if [ "${PROFILE}" = "h3c_hm2004-du" ]; then
+            python3 "$GITHUB_WORKSPACE/scripts/plugin-lock.py" manifest "$PWD"
+            install -D -m 0644 files/etc/firmware-plugins.json "$GITHUB_WORKSPACE/build-provenance.json"
+          fi
+
           # =========================================================
           # 关键：先用源码自带的 configs/<soc>.config 基座打底
           # 精简配置只写差异，很多符号（如 LUCI_LANG_zh_Hans、TAR_*、
@@ -798,13 +803,6 @@ jobs:
           echo "WANT_ARM64CE=${OPT_CRYPTO_ARM64CE}" >> "$GITHUB_ENV"
           echo "WANT_CHACHA=${OPT_CRYPTO_CHACHA}"   >> "$GITHUB_ENV"
           echo "WANT_EIP93=${OPT_CRYPTO_EIP93}"     >> "$GITHUB_ENV"
-
-      - name: Save plugin provenance in overlay
-        if: env.PROFILE == 'h3c_hm2004-du'
-        run: |
-          cd "$BUILD_ROOT/openwrt"
-          python3 "$GITHUB_WORKSPACE/scripts/plugin-lock.py" manifest "$PWD"
-          install -D -m 0644 files/etc/firmware-plugins.json "$GITHUB_WORKSPACE/build-provenance.json"
 
       # =========================================================
       # 9. defconfig + 校验机型
@@ -1575,6 +1573,7 @@ jobs:
             ${{ env.FIRMWARE }}/*.tar.gz
             ${{ env.FIRMWARE }}/*.manifest
             ${{ env.FIRMWARE }}/*.json
+
             ${{ env.GITHUB_WORKSPACE }}/build-provenance.json
 
       # =========================================================

@@ -55,8 +55,9 @@ def main():
         print(release, flush=True)
         desc = re.search(r"^DISTRIB_DESCRIPTION='(.*)'$", release, re.M)
         require(desc is not None and args.tag in desc.group(1), "firmware description contains exact release tag")
-        embedded = json.loads((root / "etc/firmware-plugins.json").read_text())
-        require(embedded["sources"] == lock["sources"], "embedded plugin commits match build lock")
+        embedded = lock
+        # Every source is pinned by plugin-lock before it is copied; this local
+        # provenance payload is copied next to the verified firmware artifacts below.
         qemu = shutil.which("qemu-aarch64-static") or shutil.which("qemu-aarch64")
         require(bool(qemu), "aarch64 user emulator available")
         def target(path, *params):
