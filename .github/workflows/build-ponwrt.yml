@@ -1341,6 +1341,9 @@ jobs:
         if: env.BUILD_SCOPE != 'toolchain-only'
         run: |
           cd "$BUILD_ROOT/openwrt"
+          if [ "${PROFILE}" = "h3c_hm2004-du" ]; then
+            python3 "$GITHUB_WORKSPACE/scripts/plugin-lock.py" manifest "$PWD" --output "$GITHUB_WORKSPACE/build-provenance.json"
+          fi
           # 可用内存(MiB) / 2GiB 每 job，下限 1、上限 nproc
           JOBS=$(awk -v p="$(nproc)" '/^MemAvailable:/{m=int($2/2097152)+1} END{print m<p?m:p}' /proc/meminfo)
           JOBS=$(( JOBS < 1 ? 1 : JOBS ))
@@ -1573,6 +1576,7 @@ jobs:
             ${{ env.FIRMWARE }}/*.tar.gz
             ${{ env.FIRMWARE }}/*.manifest
             ${{ env.FIRMWARE }}/*.json
+            ${{ github.workspace }}/build-provenance.json
 
             ${{ env.GITHUB_WORKSPACE }}/build-provenance.json
 

@@ -33,11 +33,20 @@ def checkout(name, directory):
             raise ValueError("FTTR package does not originate from the audited frontend source")
     print(f"Pinned {name}: {actual}", flush=True)
 
-
-def write_manifest(openwrt):
+def manifest_data(openwrt):
     data = lock_data()
     data["build_source"] = git(openwrt, "rev-parse", "HEAD")
     data["build_repo"] = git(REPO_ROOT, "rev-parse", "HEAD")
+    return data
+
+
+def write_manifest(openwrt, output=None):
+    data = manifest_data(openwrt)
+    if output:
+        output.parent.mkdir(parents=True, exist_ok=True)
+        output.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n")
+        print(f"Wrote plugin provenance: {output}")
+        return
     path = Path(openwrt) / "files/etc/firmware-plugins.json"
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n")
@@ -54,6 +63,7 @@ def main():
     q.add_argument("directory")
     q = sub.add_parser("manifest")
     q.add_argument("openwrt")
+    q.add_argument("--output", type=Path)
     args = p.parse_args()
     if args.command == "get":
         value = lock_data()
@@ -63,7 +73,7 @@ def main():
     elif args.command == "checkout":
         checkout(args.name, args.directory)
     else:
-        write_manifest(args.openwrt)
+        write_manifest(args.openwrt, args.output)
 
 
 if __name__ == "__main__":
