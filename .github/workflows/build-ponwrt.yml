@@ -279,6 +279,8 @@ jobs:
             libssl-dev libelf-dev bc flex bison python3 python3-distutils \
             xz-utils tar unzip zip zstd dos2unix ccache gettext \
             rsync file wget curl git subversion 2>/dev/null || true
+          # 发布前需运行固件里的 aarch64 二进制和解包验证；安装失败直接终止。
+          sudo -E apt-get -yqq install qemu-user-static squashfs-tools ripgrep
 
           # 初始化编译环境：建议将该脚本入仓并按 commit sha 校验，
           # 避免 `curl | bash` 的供应链风险。
@@ -678,12 +680,17 @@ jobs:
           if [ -n "${FEEDS_CONF}" ] && [ -e "$GITHUB_WORKSPACE/${FEEDS_CONF}" ]; then
             cp "$GITHUB_WORKSPACE/${FEEDS_CONF}" feeds.conf.default
           fi
+          bash "$GITHUB_WORKSPACE/scripts/honk-feeds.sh"
+          if [ "${PROFILE}" = "h3c_hm2004-du" ]; then
+            python3 "$GITHUB_WORKSPACE/scripts/pin-feeds.py" feeds.conf.default
+          fi
           ./scripts/feeds update -a
           ./scripts/feeds install -a
-          # honk feed 必须在 update/install 之后注入（不然 update -a 不认识它）
-          bash "$GITHUB_WORKSPACE/scripts/honk-feeds.sh"
-          ./scripts/feeds update honk
+          # honk feed pin 已在 feeds.conf.default；feed update/install 完成后安装两个 honk 包。
           ./scripts/feeds install -p honk honk luci-app-honk
+          if [ "${PROFILE}" = "h3c_hm2004-du" ]; then
+            python3 "$GITHUB_WORKSPACE/scripts/pin-feeds.py" --verify feeds.conf.default
+          fi
 
       # =========================================================
       # 5. diy-part1.sh —— 拉取可选插件
@@ -792,6 +799,13 @@ jobs:
           echo "WANT_CHACHA=${OPT_CRYPTO_CHACHA}"   >> "$GITHUB_ENV"
           echo "WANT_EIP93=${OPT_CRYPTO_EIP93}"     >> "$GITHUB_ENV"
 
+      - name: Save plugin provenance in overlay
+        if: env.PROFILE == 'h3c_hm2004-du'
+        run: |
+          cd "$BUILD_ROOT/openwrt"
+          python3 "$GITHUB_WORKSPACE/scripts/plugin-lock.py" manifest "$PWD"
+          install -D -m 0644 files/etc/firmware-plugins.json "$GITHUB_WORKSPACE/build-provenance.json"
+
       # =========================================================
       # 9. defconfig + 校验机型
       #    【唯一一次 defconfig】后续不再调用，避免 .config 被重新展开、
@@ -868,31 +882,10 @@ jobs:
           fi
           echo "✅ PON 关键包校验通过"
 
-          # =========================================================
-          # FTTR device feature 符号追加（★2026-11-14）
-          #
-          # 现象：v2026.11.13/14/15 的 fttrd 二进制 capability 只有 5 个
-          #   device feature（hl202/hwtc/scty/star/zte），缺 fiberhome/realtek，
-          #   界面选这两个 adapter 报 "Selected OMCI adapter is unavailable"。
-          # 根因：fttr Makefile 的 RUST_PKG_FEATURES 直接 $(if $(CONFIG_FTTR_DEVICE_X),...)
-          #   读 .config 注入的 Makefile 变量（rules.mk 的 -include .config），而
-          #   PonWrt 树的 defconfig 实测会丢 CONFIG_FTTR_DEVICE_FIBERHOME/REALTEK
-          #   这两个符号（官方 OpenWrt 树不丢，已在复现环境对比确认）。
-          # 修复：本步骤是【唯一一次 defconfig】（见上方注释），defconfig 跑完后
-          #   直接把缺的符号追加进 .config——后续 make 不再跑 defconfig，
-          #   rules.mk 的 -include .config 直接读到追加值，RUST_PKG_FEATURES
-          #   即可拿到 device-fiberhome / device-realtek。
-          #   （diy-part1.sh 里对 fttr Makefile 的 ?=y 兜底是第二道保险。）
-          # =========================================================
-          if [ "${PROFILE}" = "h3c_hm2004-du" ] && grep -q "^CONFIG_PACKAGE_openwrt-fttr=y" .config; then
-            for s in FTTR_DEVICE_FIBERHOME FTTR_DEVICE_REALTEK; do
-              if ! grep -q "^CONFIG_${s}=y" .config; then
-                echo "CONFIG_${s}=y" >> .config
-                echo "::warning::defconfig 丢了 CONFIG_${s}，已追加进 .config"
-              fi
-            done
-            echo "=== 最终 .config 里 FTTR 符号 ==="
-            grep -E "^CONFIG_FTTR" .config || echo "::warning::.config 里没有任何 CONFIG_FTTR 符号"
+          # 选择缺失即失败；不再改写上游 Makefile 或补造被误判的 feature。
+          # strings 的 device-* 是 serde 字段名，真实 adapter 要运行 --capabilities。
+          if [ "${PROFILE}" = "h3c_hm2004-du" ]; then
+            python3 "$GITHUB_WORKSPACE/scripts/verify-plugin-config.py" "$PWD"
           fi
 
           # =========================================================
@@ -1374,6 +1367,13 @@ jobs:
           # 全量再冻一次：target 阶段会顺带编出一批 host 包（python3 等），
           # 这些戳只有编译结束才存在。source 模式下它们同样会被自举。
           bash "$GITHUB_WORKSPACE/scripts/pwrt-cache.sh" freeze "$CACHE_ROOT" || true
+
+      - name: Verify HM2004 plugin image
+        if: steps.compile.outputs.status == 'success' && env.PROFILE == 'h3c_hm2004-du'
+        run: |
+          python3 "$GITHUB_WORKSPACE/scripts/verify-hm2004-image.py" "$BUILD_ROOT/openwrt" --tag "$GITHUB_REF_NAME"
+          cp "$BUILD_ROOT/openwrt/configs.buildinfo" /tmp/configs.buildinfo 2>/dev/null || true
+          cp "$BUILD_ROOT/openwrt/.config" "$BUILD_ROOT/openwrt/bin/targets/airoha/an7581/build.config"
 
       # =========================================================
       # 18.5 存新一代缓存

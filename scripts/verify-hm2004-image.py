@@ -1,0 +1,102 @@
+#!/usr/bin/env python3
+"""Inspect the built HM2004 image before it can be uploaded to a release."""
+import argparse
+import hashlib
+import json
+import mmap
+from pathlib import Path
+import re
+import shutil
+import struct
+import subprocess
+import tempfile
+
+
+def require(ok, message):
+    if not ok:
+        raise ValueError(message)
+    print("PASS", message, flush=True)
+
+
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("openwrt", type=Path)
+    parser.add_argument("--tag", required=True)
+    args = parser.parse_args()
+    ow = args.openwrt.resolve()
+    repo = Path(__file__).resolve().parents[1]
+    lock = json.loads((repo / "configs/plugins.lock.json").read_text())
+    images = list((ow / "bin/targets").glob("*/*/*h3c_hm2004-du-squashfs-sysupgrade.itb"))
+    require(len(images) == 1, "exactly one HM2004 sysupgrade image")
+    image = images[0]
+    manifest = image.parent / "ponwrt-airoha-an7581-h3c_hm2004-du.manifest"
+    installed = dict(line.split(" - ", 1) for line in manifest.read_text().splitlines() if " - " in line)
+    for name, version in lock["expected"]["packages"].items():
+        if name == "honk-core":
+            continue  # Core binary is statically sourced; manifest reports only the package wrapper.
+        require(installed.get(name) == version, f"{name} = {version}; actual {installed.get(name)}")
+    with tempfile.TemporaryDirectory(prefix="verify-hm2004-") as temp:
+        tmp = Path(temp)
+        squashfs = tmp / "root.squashfs"
+        with image.open("rb") as stream, mmap.mmap(stream.fileno(), 0, access=mmap.ACCESS_READ) as data:
+            offset = data.find(b"hsqs")
+            require(offset >= 0, "SquashFS found in FIT image")
+            # SquashFS v4 superblock: bytes_used is u64 at offset 40.
+            length = struct.unpack_from("<Q", data, offset + 40)[0]
+            require(96 < length <= len(data) - offset, "SquashFS size is within image bounds")
+            squashfs.write_bytes(data[offset:offset + length])
+        root = tmp / "root"
+        # All target libraries are required by the musl binary and ucode runtime.
+        subprocess.run(["unsquashfs", "-q", "-d", str(root), str(squashfs),
+                        "etc/*", "lib/*", "usr/sbin/fttrd", "usr/bin/ucode", "usr/bin/rtp2httpd",
+                        "usr/lib/*", "usr/libexec/*", "usr/share/ucode/*", "www/*"], check=True)
+        release = (root / "etc/openwrt_release").read_text()
+        print(release, flush=True)
+        desc = re.search(r"^DISTRIB_DESCRIPTION='(.*)'$", release, re.M)
+        require(desc is not None and args.tag in desc.group(1), "firmware description contains exact release tag")
+        embedded = json.loads((root / "etc/firmware-plugins.json").read_text())
+        require(embedded["sources"] == lock["sources"], "embedded plugin commits match build lock")
+        qemu = shutil.which("qemu-aarch64-static") or shutil.which("qemu-aarch64")
+        require(bool(qemu), "aarch64 user emulator available")
+        def target(path, *params):
+            return subprocess.check_output([qemu, "-L", str(root), str(root / path), *params], text=True, stderr=subprocess.PIPE, timeout=45)
+        caps = json.loads(target("usr/sbin/fttrd", "--capabilities"))
+        require(isinstance(caps.get("adapters"), dict), "FTTR grouped adapter schema")
+        for layer, key in [("omci", "omci_adapters"), ("bootstrap", "bootstrap_adapters")]:
+            actual = {item["id"] for item in caps["adapters"][layer]}
+            require(actual == set(lock["expected"][key]), f"FTTR {layer}: {sorted(actual)}")
+        require(caps["features"].get("acs") is True and caps["features"].get("mqtt") is True, "ACS and MQTT compiled")
+        require(any(item.get("id") == "auto" for item in caps["adapters"]["omci"]), "auto OMCI adapter exists in pinned upstream")
+        config = (root / "etc/config/fttr").read_text()
+        require("config omci_auth 'global'" in config and "option auth_mode 'disabled'" in config, "ONU authentication defaults to disabled")
+        require(hashlib.sha256((root / "lib/firmware/FTTR_TOP.sbit").read_bytes()).hexdigest() == lock["expected"]["fpga_sha256"], "FPGA bitstream matches audited upstream")
+        honk = (root / "etc/config/honk").read_text()
+        require(re.search(r"option\s+enabled\s+['\"]0['\"]", honk) is not None, "honk defaults disabled")
+        lan = (root / "etc/uci-defaults/93-lan-dhcp").read_text()
+        for expected in ["network.lan.ipaddr='10.1.1.1'", "dhcp.lan.start='2'", "dhcp.@dnsmasq[0].sequential_ip='1'"]:
+            require(expected in lan, expected)
+        wifi = (root / "etc/uci-defaults/95-wifi-hanzi").read_text()
+        require("SSID='hanzi'" in wifi and "KEY='hanziwawa'" in wifi, "both WiFi bands retain user defaults")
+        rtp_init = (root / "etc/init.d/rtp2httpd").read_text()
+        require("zerocopy_on_send" not in rtp_init, "rtp2httpd init does not send removed option")
+        require("3.17.2" in target("usr/bin/rtp2httpd", "--help"), "target rtp2httpd binary reports 3.17.2")
+        theme = root / "www/luci-static/resources/argon-compat.js"
+        if not theme.is_file():
+            theme = root / "www/luci-static/resources/argon/argon-compat.js"
+        require(theme.is_file(), "Argon 3.1.4 browser compatibility module installed")
+        template_dir = root / "usr/share/ucode/template/themes/argon"
+        templates = list(template_dir.glob("*.ut"))
+        if not templates:
+            template_dir = root / "usr/share/ucode/luci/template/themes/argon"
+            templates = list(template_dir.glob("*.ut"))
+        require(bool(templates), "Argon ucode templates installed")
+        for file in templates:
+            subprocess.run([qemu, "-L", str(root), str(root / "usr/bin/ucode"), "-c", "-o", str(tmp / "template.ucb"), str(file)], check=True, capture_output=True, timeout=20)
+        require(True, f"target ucode compiles {len(templates)} Argon templates")
+        (image.parent / "plugin-verification.json").write_text(json.dumps({"tag":args.tag,"passed":True,"packages":lock["expected"]["packages"],"fttr_capabilities":caps,"sources":lock["sources"]}, ensure_ascii=False, indent=2) + "\n")
+        (image.parent / "plugin-sources.json").write_text(json.dumps(embedded, ensure_ascii=False, indent=2) + "\n")
+    print("All HM2004 image checks passed; target-device IPTV/WiFi traffic remains an on-device test.")
+
+
+if __name__ == "__main__":
+    main()

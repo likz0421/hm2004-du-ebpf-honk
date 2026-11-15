@@ -1,0 +1,150 @@
+{
+  "schema_version": 1,
+  "checked_at": "2026-11-16",
+  "sources": {
+    "fttr-backend": {
+      "repo": "LazuliKao/openwrt-fttr",
+      "branch": "main",
+      "commit": "cbcf1308f45259100391accc9ede7ac3e545676c",
+      "previous_commit": "fb3128263663ceb8ac978c7cb0eec0be7963e953",
+      "today_commit": "0d46dd9bd195f98e4b8941a2a8b5841d5d7e0ab7"
+    },
+    "fttr-frontend": {
+      "repo": "LazuliKao/luci-app-fttr",
+      "branch": "package",
+      "commit": "e1a21e6e0d95fd3c6f39445b16d9e197b97f361d",
+      "source_commit": "385492a8c5f530847dde3948f21bf3860bccf84b",
+      "version": "2026.11.15.105855",
+      "previous_commit": "466a869d29fcadef165f4c78d69dcea4749eef52",
+      "today_commit": "a608264943b5e0f49298a3ff071d22e330c5ad9e",
+      "previous_version": "2026.11.14.162613"
+    },
+    "honk-feed": {
+      "repo": "kenzok8/openwrt-honk",
+      "branch": "main",
+      "commit": "2b75c93004cc5fef928920ddf019b8196cda1991",
+      "previous_commit": "7b1c0140ec6f0f0e2ce5c8b6f7e78f6716344a45",
+      "core_commit": "64848881b7304e250e7a25422f4f1d86a5975eca",
+      "core_version": "v0.1.0-beta.6",
+      "feed_version": "2026.11.12",
+      "luci_version": "2026.11.12.2",
+      "core_archive_sha256": "27df7fbab0e3fb15cb3171d1f74d387f815ecc7c53f96256af11dcc6618da047",
+      "core_source_tag": "source-42975766273"
+    },
+    "qwe-luci": {
+      "repo": "qwe-qaq/luci-app",
+      "branch": "main",
+      "commit": "2e95bd7355a3e50692dafad56592776a10ba081c"
+    },
+    "airoha-npu": {
+      "repo": "luanmuc/luci-app-airoha-npu",
+      "branch": "main",
+      "commit": "5c6e9e079ad9ecb1446c674e964f797842675856"
+    }
+  },
+  "provenance": {
+    "package_sources": {
+      "luci-app-honk": "https://github.com/kenzok8/openwrt-honk/tree/2b75c93004cc5fef928920ddf019b8196cda1991/luci-app-honk",
+      "luci-app-ota": "repository-managed custom source"
+    }
+  },
+  "feed_update": {
+    "url": "https://github.com/kenzok8/openwrt-honk.git",
+    "name": "honk",
+    "branch": "main",
+    "commit": "2b75c93004cc5fef928920ddf019b8196cda1991"
+  },
+  "feeds": {
+    "packages": {
+      "branch": "master",
+      "url": "https://github.com/immortalwrt/packages.git",
+      "commit": "decf94639ffd6ddd26591c190b547c6b7eea150b"
+    },
+    "luci": {
+      "branch": "master",
+      "url": "https://github.com/immortalwrt/luci.git",
+      "commit": "ad75cde88e694b511100576bfbe0a280e5efe6ef"
+    },
+    "routing": {
+      "branch": "master",
+      "url": "https://github.com/openwrt/routing.git",
+      "commit": "ea8633da9c461a9bdc62a0323439d31180762e03"
+    },
+    "telephony": {
+      "branch": "master",
+      "url": "https://github.com/openwrt/telephony.git",
+      "commit": "06feffc2c154993f555b43756ef7db6dd7e58225"
+    },
+    "video": {
+      "branch": "master",
+      "url": "https://github.com/openwrt/video.git",
+      "commit": "97137d9e4bbf2d5b8fc74b49d2a8641f21855032"
+    },
+    "pon_drivers": {
+      "branch": "main",
+      "url": "https://github.com/pbs05/openwrt-pon-drivers.git",
+      "commit": "2789b970a6bfcc5ee56cee699622201b8061b67c"
+    },
+    "pon_userspace": {
+      "branch": "main",
+      "url": "https://github.com/pbs05/openwrt-pon-userspace.git",
+      "commit": "cce9d756742487b378749c606b30e13ee9b0f093"
+    },
+    "honk": {
+      "branch": "main",
+      "url": "https://github.com/kenzok8/openwrt-honk.git",
+      "commit": "2b75c93004cc5fef928920ddf019b8196cda1991"
+    }
+  },
+  "archives": {
+    "argon": {
+      "version": "3.1.4",
+      "release": "20261113",
+      "commit": "c5c0873e122dc767c7ab0198c8bffc6e952b5cfb",
+      "url": "https://codeload.github.com/jerrykuku/luci-theme-argon/tar.gz/c5c0873e122dc767c7ab0198c8bffc6e952b5cfb",
+      "sha256": "a9a33eba54caef949d876a52f63037be681f6d9db239875bd46a84e8d35f50ca"
+    },
+    "rtp2httpd": {
+      "version": "3.17.2",
+      "url": "https://codeload.github.com/stackia/rtp2httpd/tar.gz/v3.17.2",
+      "sha256": "ce866091321a0d69dff7e8f7dda5d68be94e901659ed7d2ff4896029c8200ee6"
+    },
+    "geosite": {
+      "version": "20261115151618",
+      "url": "https://github.com/v2fly/domain-list-community/releases/download/20261115151618/dlc.dat",
+      "sha256": "94ad31b62a6e977599a5ac7489e94f8e1fe2c4a2b679336ca954b33bdf6aadf4"
+    }
+  },
+  "expected": {
+    "omci_adapters": [
+      "auto",
+      "generic",
+      "hl202",
+      "hwtc",
+      "star",
+      "zte",
+      "scty",
+      "fiberhome",
+      "realtek"
+    ],
+    "bootstrap_adapters": [
+      "none",
+      "manual-acs",
+      "omci-acs",
+      "hl202-mqtt-acs"
+    ],
+    "fpga_sha256": "64d583215331d8b854dcc313be1fb82e171d601f5c11e45fd84d483c17bbc4ff",
+    "packages": {
+      "luci-app-fttr": "2026.11.15.105855-r1",
+      "openwrt-fttr": "0.1.0-r1",
+      "h3c-fmcs-firmware": "1.0-r1",
+      "honk": "2026.11.12-r1",
+      "luci-app-honk": "2026.11.12.2-r1",
+      "luci-theme-argon": "3.1.4-r20261113",
+      "rtp2httpd": "3.17.2-r1",
+      "v2ray-geosite": "20261115151618-r1",
+      "v2ray-geoip": "202611080027-r1",
+      "luci-app-ota": "1.0.2-r1"
+    }
+  }
+}
