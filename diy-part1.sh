@@ -65,21 +65,37 @@ ADD_LUCI_APP=true       # qwe-qaq/luci-app 仓库（monorepo）
 #   本地手工跑 h3c 机型时，显式 PROFILE=h3c_hm2004-du 即可。
 FTTR_PROFILE="${PROFILE:-none}"
 
+SCRIPT_ROOT="$(cd "$(dirname "$0")" && pwd)"
+PLUGIN_LOCK_TOOL="$SCRIPT_ROOT/scripts/plugin-lock.py"
+
 clone() {  # clone <url> <dir> [branch]
-  local url="$1" dir="$2" br="$3"
-  [ -d "$dir" ] && { echo "已存在，跳过: $dir"; return 0; }
-  echo "--- git clone $url -> $dir ---"
-  if [ -n "$br" ]; then
-    git clone --depth 1 -b "$br" "$url" "$dir" 2>&1 | tail -3
-  else
-    git clone --depth 1 "$url" "$dir" 2>&1 | tail -3
+  local url="$1" dir="$2" br="$3" log
+  if git -C "$dir" rev-parse --verify HEAD >/dev/null 2>&1; then
+    echo "已存在有效仓库，跳过: $dir"
+    return 0
   fi
-  if [ -d "$dir" ]; then
+  log="$(mktemp)"
+  echo "--- git clone $url -> $dir ---"
+  if { [ -n "$br" ] && git clone --depth 1 -b "$br" "$url" "$dir" >"$log" 2>&1; } || \
+     { [ -z "$br" ] && git clone --depth 1 "$url" "$dir" >"$log" 2>&1; }; then
+    tail -3 "$log"
+    rm -f "$log"
+    git -C "$dir" rev-parse --verify HEAD >/dev/null || return 1
     echo "✅ 克隆成功: $dir"
     return 0
   fi
+  tail -10 "$log"
+  rm -f "$log"
   echo "::error::克隆失败: $url"
   return 1
+}
+
+clone_pinned() {  # clone_pinned <lock source name> <destination>
+  local name="$1" dir="$2" repo branch
+  repo="$(python3 "$PLUGIN_LOCK_TOOL" get "sources.$name.repo")" || return 1
+  branch="$(python3 "$PLUGIN_LOCK_TOOL" get "sources.$name.branch")" || return 1
+  clone "https://github.com/$repo" "$dir" "$branch" || return 1
+  python3 "$PLUGIN_LOCK_TOOL" checkout "$name" "$dir"
 }
 # =========================================================
 # qwe3017/luci-app —— 三个 LuCI 插件的来源
@@ -91,9 +107,9 @@ clone() {  # clone <url> <dir> [branch]
 #   └── luci-app-igmpproxy/
 # =========================================================
 if [ "$ADD_LUCI_APP" = "true" ]; then
-  LUCI_APP_URL="https://github.com/qwe-qaq/luci-app"
+  LUCI_APP_URL="https://github.com/$(python3 "$PLUGIN_LOCK_TOOL" get sources.qwe-luci.repo)"
   LUCI_APP_TMP="$(mktemp -d)/luci-app"
-  if ! clone "$LUCI_APP_URL" "$LUCI_APP_TMP" main; then
+  if ! clone_pinned qwe-luci "$LUCI_APP_TMP"; then
     echo "::error::qwe3017/luci-app 拉取失败，natmode / pon-status / igmpproxy 会被 defconfig 剔除"
     exit 1
   fi
@@ -141,11 +157,11 @@ fi
 #   校验内置了这层映射（pkgname_of），看到的是 ✅ h3c-fmcs → kmod-h3c-fmcs。
 # =========================================================
 if [ "$ADD_FTTR" = "true" ] && [ "$FTTR_PROFILE" = "h3c_hm2004-du" ]; then
-  # 仓库与分支由 workflow 注入，本地手工跑时回退到下面的默认值
-  FTTR_FEED_URL="https://github.com/${PRIVATE_REPO:-LazuliKao/openwrt-fttr}"
-  FTTR_FEED_BRANCH="${PRIVATE_REPO_BRANCH:-main}"
+  # 来源与 SHA 同前端配套记录，防止构建中上游分支移动造成错配。
+  FTTR_FEED_URL="https://github.com/$(python3 "$PLUGIN_LOCK_TOOL" get sources.fttr-backend.repo)"
+  FTTR_FEED_BRANCH="$(python3 "$PLUGIN_LOCK_TOOL" get sources.fttr-backend.branch)"
   FTTR_FEED_TMP="$(mktemp -d)/openwrt-fttr"
-  if ! clone "$FTTR_FEED_URL" "$FTTR_FEED_TMP" "$FTTR_FEED_BRANCH"; then
+  if ! clone_pinned fttr-backend "$FTTR_FEED_TMP"; then
     echo "::error::openwrt-fttr 拉取失败：${FTTR_FEED_URL} (分支 ${FTTR_FEED_BRANCH})，kmod-h3c-fmcs / openwrt-fttr / h3c-fmcs-firmware 会被 defconfig 剔除；luci-app-fttr 因依赖 +openwrt-fttr 也会被连带剔除"
     echo "        公开仓库失败=仓库/分支名不对；私有仓库缺凭证=优先查 GitHub App（PRIVATE_SOURCE_APP_ID / PRIVATE_SOURCE_APP_PRIVATE_KEY，App 要装到该仓库且 Contents: Read-only），回退才看 Secret PRIVATE_REPO_TOKEN 是否有效（PAT 需对该仓库有 Contents 读权限）"
     exit 1
@@ -195,32 +211,8 @@ if [ "$ADD_FTTR" = "true" ] && [ "$FTTR_PROFILE" = "h3c_hm2004-du" ]; then
   done
   rm -rf "$FTTR_FEED_TMP"
 
-  # =========================================================
-  # ★ 确保 fttrd 编译时启用全部 device feature（fiberhome / realtek 等）
-  #
-  # 根因：fttr Makefile 的 RUST_PKG_FEATURES 用 $(if $(CONFIG_FTTR_DEVICE_X),...)
-  #   从 auto.conf 读 CONFIG 符号决定是否传给 cargo。实测发现即使 .config 里
-  #   CONFIG_FTTR_DEVICE_FIBERHOME=y，编译出的 fttrd 也缺 fiberhome/realtek
-  #   （capability 列表只有 hl202/hwtc/scty/star/zte），用户在界面选这些
-  #   adapter 就报 "Selected OMCI adapter is unavailable in this build"。
-  # 修复：在 RUST_PKG_FEATURES 求值前用 ?= 给这些符号兜底默认 y。
-  #   ?= 只在变量未定义时赋值——auto.conf 有值就用 auto.conf 的，没有就兜底 y，
-  #   不影响用户显式 =n 关闭。
-  # =========================================================
-  FTTR_MK="$PKG_DIR/openwrt-fttr/Makefile"
-  if [ -f "$FTTR_MK" ] && grep -q '^RUST_PKG_FEATURES:=' "$FTTR_MK"; then
-    if ! grep -q 'CONFIG_FTTR_DEVICE_FIBERHOME?=' "$FTTR_MK"; then
-      sed -i '/^RUST_PKG_FEATURES:=/i\
-# 兜底：确保全部 device feature 传给 cargo（见上方注释）\
-CONFIG_FTTR_DEVICE_FIBERHOME?=y\
-CONFIG_FTTR_DEVICE_REALTEK?=y' "$FTTR_MK"
-      echo "✅ 已给 openwrt-fttr/Makefile 打 device feature 兜底补丁"
-    fi
-    # 断言：补丁必须生效
-    grep -q 'CONFIG_FTTR_DEVICE_FIBERHOME?=' "$FTTR_MK" || {
-      echo "::error::openwrt-fttr/Makefile device feature 兜底补丁未生效"; exit 1
-    }
-  fi
+  # 保持原作者 Rust/驱动源码和 feature 选择逻辑原样。
+  # adapters 的真实能力由构建后的 fttrd --capabilities 验证，不能用 strings 推断。
 fi
 
 # =========================================================
@@ -243,11 +235,11 @@ fi
 #   所以每次拷贝后幂等补一行，见下方。
 # =========================================================
 if [ "$ADD_FTTR" = "true" ] && [ "$ADD_FTTR_LUCI" = "true" ] && [ "$FTTR_PROFILE" = "h3c_hm2004-du" ]; then
-  # 用独立变量名，不与 workflow 里指向「源码仓 main 分支」的 FTTR_LUCI_* 冲突
-  FTTR_PKG_REPO="${FTTR_PKG_REPO:-LazuliKao/luci-app-fttr}"
-  FTTR_PKG_BRANCH="${FTTR_PKG_BRANCH:-package}"
+  # package 是原作者生成分支；固定其 SHA 和生成它的 main SHA，与后端成对验证。
+  FTTR_PKG_REPO="$(python3 "$PLUGIN_LOCK_TOOL" get sources.fttr-frontend.repo)"
+  FTTR_PKG_BRANCH="$(python3 "$PLUGIN_LOCK_TOOL" get sources.fttr-frontend.branch)"
   FTTR_TMP="$(mktemp -d)/fttr"
-  if ! clone "https://github.com/${FTTR_PKG_REPO}" "$FTTR_TMP" "$FTTR_PKG_BRANCH"; then
+  if ! clone_pinned fttr-frontend "$FTTR_TMP"; then
     echo "::error::luci-app-fttr 的 ${FTTR_PKG_BRANCH} 分支拉取失败，config 里的 =y 会被 defconfig 剔除"
     exit 1
   fi
@@ -285,7 +277,7 @@ fi
 #   - 无 rchen14b 那种「根目录 + 同名子目录」重复结构，feed 索引不会中断
 #   - 修了 luci.mk 的 include 路径、加了独立 CPU 温度与 PLL 备用频率
 if [ "$ADD_AIROHA_NPU" = "true" ]; then
-  if ! clone https://github.com/luanmuc/luci-app-airoha-npu "$PKG_DIR/luci-app-airoha-npu" main; then
+  if ! clone_pinned airoha-npu "$PKG_DIR/luci-app-airoha-npu"; then
     echo "::error::luci-app-airoha-npu 拉取失败，后续 defconfig 会静默剔除该包"
     exit 1
   fi
@@ -511,6 +503,12 @@ for d in "$PKG_DIR"/*; do
     echo "✅ 已移除重复嵌套目录: $n/$n"
   fi
 done
+
+# 原 feed 尚未跟进的正式版和规则数据，在索引前一次性应用。
+if [ "$FTTR_PROFILE" = "h3c_hm2004-du" ]; then
+  python3 "$SCRIPT_ROOT/scripts/update-plugin-packages.py" "$PWD" || exit 1
+fi
+
 # ---------------------------------------------------------
 # 让新包进入索引
 #   ⚠ 判据是 tmp/.packageinfo，不是 package/feeds/custom

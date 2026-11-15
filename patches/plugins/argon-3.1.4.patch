@@ -1,0 +1,1522 @@
+diff --git a/feeds/luci/themes/luci-theme-argon/Makefile b/feeds/luci/themes/luci-theme-argon/Makefile
+index 672ef8e..a067e74 100644
+--- a/feeds/luci/themes/luci-theme-argon/Makefile
++++ b/feeds/luci/themes/luci-theme-argon/Makefile
+@@ -7,11 +7,11 @@
+ include $(TOPDIR)/rules.mk
+ 
+ LUCI_TITLE:=Argon Theme
+-LUCI_DEPENDS:=+wget-any +jsonfilter +ucode-mod-math
++LUCI_DEPENDS:=+wget-any +ca-bundle +jsonfilter +ucode-mod-math
+ LUCI_BASENAME:=argon-config
+ 
+-PKG_VERSION:=3.1.3
+-PKG_RELEASE:=20261106
++PKG_VERSION:=3.1.4
++PKG_RELEASE:=20261113
+ PKG_PROVIDES:=luci-app-argon-config
+ 
+ PKG_LICENSE:=Apache-2.0 MIT
+diff --git a/feeds/luci/themes/luci-theme-argon/htdocs/luci-static/argon/css/cascade.css b/feeds/luci/themes/luci-theme-argon/htdocs/luci-static/argon/css/cascade.css
+index 7c0fb4d..5666d7e 100644
+--- a/feeds/luci/themes/luci-theme-argon/htdocs/luci-static/argon/css/cascade.css
++++ b/feeds/luci/themes/luci-theme-argon/htdocs/luci-static/argon/css/cascade.css
+@@ -510,6 +510,23 @@
+   white-space: nowrap;
+   border: 0;
+ }
++.skip-link {
++  position: fixed;
++  z-index: 1200;
++  inset-block-start: var(--control-gap);
++  inset-inline-start: var(--page-gutter);
++  padding: 0.5rem 0.75rem;
++  color: var(--text-strong);
++  background: var(--surface-panel);
++  border: 1px solid var(--border-color);
++  border-radius: var(--radius-control);
++  transform: translateY(calc(-100% - var(--control-gap)));
++}
++.skip-link:focus {
++  transform: none;
++  outline: 2px solid var(--focus-ring);
++  outline-offset: 2px;
++}
+ @media (prefers-reduced-motion: reduce) {
+   .main-left,
+   .main-right,
+@@ -1128,23 +1145,53 @@ select[multiple] {
+   height: 100%;
+   object-fit: cover;
+ }
+-.login-page .volume-control {
++.login-page .background-controls {
+   position: fixed;
+-  top: 1rem;
+-  right: 1rem;
+-  width: 1.5rem;
+-  height: 1.5rem;
++  inset-block-start: var(--field-gap);
++  inset-inline-end: var(--field-gap);
++  display: flex;
++  gap: var(--control-gap);
+   z-index: 5000;
++}
++.login-page .background-controls > button {
++  display: grid;
++  place-items: center;
++  min-width: 2.5rem;
++  min-height: 2.5rem;
++  padding: 0.5rem;
+   cursor: pointer;
+-  border: 0 !important;
+-  background: url(../img/volume_high.svg) no-repeat center / contain;
++  background: var(--surface-panel);
++  color: var(--text-strong);
+ }
+-.login-page .volume-control:focus-visible {
++.login-page .background-controls > button::before {
++  content: '';
++  width: 1rem;
++  height: 1rem;
++  background-color: currentColor;
++  mask: var(--background-control-icon) center / contain no-repeat;
++  -webkit-mask: var(--background-control-icon) center / contain no-repeat;
++}
++.login-page .background-controls > button:focus-visible {
+   outline: 2px solid var(--focus-ring);
+-  outline-offset: 4px;
++  outline-offset: 2px;
++}
++@media (forced-colors: active) {
++  .login-page .background-controls > button::before {
++    forced-color-adjust: none;
++    background-color: ButtonText;
++  }
++}
++.login-page .playback-control {
++  --background-control-icon: url(../icon/play.svg);
++}
++.login-page .playback-control.playing {
++  --background-control-icon: url(../icon/pause.svg);
++}
++.login-page .volume-control {
++  --background-control-icon: url(../img/volume_high.svg);
+ }
+ .login-page .volume-control.mute {
+-  background-image: url(../img/volume_off.svg);
++  --background-control-icon: url(../img/volume_off.svg);
+ }
+ .login-page .login-container {
+   --login-inset: 3.125rem;
+@@ -1795,7 +1842,7 @@ footer > a {
+   background: var(--surface-color);
+   box-shadow: var(--section-shadow);
+ }
+-#view > div:first-child:not(.cbi-map) {
++#view > div:first-child:not(.cbi-map, .Dashboard) {
+   display: flex;
+   flex-direction: column;
+   min-width: 0;
+@@ -1991,6 +2038,7 @@ span.spinning {
+ .alert-message {
+   transform: none;
+   position: static;
++  z-index: auto;
+   transition: opacity 0.4s ease;
+ }
+ .alert-message.fade-out {
+@@ -2316,6 +2364,10 @@ fieldset > fieldset,
+ .cbi-tblsection {
+   overflow-x: auto;
+ }
++.cbi-tblsection:is(:has(.cbi-dropdown), .argon-dropdown-section),
++.cbi-tblsection .table:is(:has(.cbi-dropdown), .argon-dropdown-section) {
++  overflow: visible;
++}
+ table {
+   border-spacing: 0;
+   border-collapse: collapse;
+@@ -2865,18 +2917,11 @@ header .header-actions {
+   min-width: 0;
+   overflow-wrap: anywhere;
+ }
+-#argon-appearance .argon-appearance-panel .argon-appearance-option:has(input:checked) {
+-  color: var(--dropdown-selected-text);
+-  background: var(--dropdown-selected-bg);
+-}
+-#argon-appearance .argon-appearance-panel .argon-appearance-option:has(input:checked)::after {
+-  visibility: visible;
+-}
+-#argon-appearance .argon-appearance-panel .argon-appearance-option:has(input:focus-visible) {
++#argon-appearance .argon-appearance-panel .argon-appearance-option:focus-within {
+   outline: 2px solid var(--focus-ring);
+   outline-offset: -2px;
+ }
+-#argon-appearance .argon-appearance-panel .argon-appearance-option:has(input:disabled) {
++#argon-appearance .argon-appearance-panel .argon-appearance-option[aria-disabled="true"] {
+   cursor: default;
+   opacity: 0.6;
+ }
+@@ -2894,7 +2939,7 @@ header .header-actions {
+   #argon-appearance .argon-appearance-trigger:hover {
+     background-color: var(--surface-active);
+   }
+-  #argon-appearance .argon-appearance-option:has(input:not(:disabled)):not(:has(input:checked)):hover {
++  #argon-appearance .argon-appearance-option:not([aria-disabled="true"]):hover {
+     background: var(--dropdown-hover-bg);
+   }
+ }
+@@ -2914,6 +2959,17 @@ header .header-actions {
+     background-color: CanvasText;
+   }
+ }
++#argon-appearance[data-mode="light"] .argon-appearance-option[data-mode="light"],
++#argon-appearance[data-mode="dark"] .argon-appearance-option[data-mode="dark"],
++#argon-appearance[data-mode="normal"] .argon-appearance-option[data-mode="normal"] {
++  color: var(--dropdown-selected-text);
++  background: var(--dropdown-selected-bg);
++}
++#argon-appearance[data-mode="light"] .argon-appearance-option[data-mode="light"]::after,
++#argon-appearance[data-mode="dark"] .argon-appearance-option[data-mode="dark"]::after,
++#argon-appearance[data-mode="normal"] .argon-appearance-option[data-mode="normal"]::after {
++  visibility: visible;
++}
+ @starting-style {
+   #argon-appearance .argon-appearance-panel {
+     opacity: 0;
+@@ -3216,11 +3272,11 @@ header .header-actions {
+ .control-group > * {
+   max-width: 100%;
+ }
+-.control-group:has(> input:first-child + .cbi-button) {
++.control-group:is(:has(> input:first-child + .cbi-button), .argon-joined-control) {
+   flex-wrap: nowrap;
+   gap: 0;
+ }
+-.control-group:has(> input:first-child + .cbi-button) > input {
++.control-group:is(:has(> input:first-child + .cbi-button), .argon-joined-control) > input {
+   flex: 0 1 15.5rem;
+   min-width: 0;
+   border-inline-end-width: 0;
+@@ -3228,14 +3284,14 @@ header .header-actions {
+   border-end-end-radius: 0;
+   margin-inline-end: 0;
+ }
+-.control-group:has(> input:first-child + .cbi-button) > input + .cbi-button {
++.control-group:is(:has(> input:first-child + .cbi-button), .argon-joined-control) > input + .cbi-button {
+   flex: 0 0 auto;
+   border-inline-start-width: 0;
+   border-start-start-radius: 0;
+   border-end-start-radius: 0;
+   margin-inline-start: 0;
+ }
+-.control-group:has(> input:first-child + .cbi-button) > .cbi-input-password + .cbi-button {
++.control-group:is(:has(> input:first-child + .cbi-button), .argon-joined-control) > .cbi-input-password + .cbi-button {
+   flex-basis: 2.5rem;
+   padding-inline: 0;
+ }
+@@ -6492,6 +6548,9 @@ pre.command-output {
+   min-width: min(100%, 18rem);
+   padding-block-end: var(--field-gap);
+ }
++#view > .Dashboard .dashboard-charts > .cbi-section > h3:first-child {
++  padding: var(--field-gap) var(--section-inset);
++}
+ #view > .Dashboard .dashboard-charts > .cbi-section > :not(h3:first-child) {
+   margin-inline: var(--section-inset);
+ }
+@@ -6529,6 +6588,47 @@ pre.command-output {
+ #view > .Dashboard [data-tab="layout"] .cbi-page-actions {
+   padding: var(--field-gap) var(--section-inset);
+ }
++#view > .Dashboard .dashboard-widget-list > .item {
++  align-items: flex-start;
++  pointer-events: auto;
++}
++#view > .Dashboard .dashboard-widget-list > .item > span {
++  flex: 1 1 auto;
++  width: auto;
++}
++#view > .Dashboard .dashboard-widget-settings {
++  flex: 1 1 0;
++  min-width: 0;
++  border: 1px solid var(--border-color);
++  border-radius: var(--radius-control) 0 0 var(--radius-control);
++}
++#view > .Dashboard .dashboard-widget-settings > summary {
++  box-sizing: border-box;
++  min-height: calc(2.5rem - 2px);
++  padding: 0.5rem 0.75rem;
++  line-height: 1.5;
++  list-style-position: inside;
++  overflow-wrap: anywhere;
++}
++#view > .Dashboard .dashboard-widget-settings > summary:focus-visible {
++  outline: 2px solid var(--focus-ring);
++  outline-offset: -2px;
++  border-radius: inherit;
++}
++[dir="rtl"] #view > .Dashboard .dashboard-widget-settings {
++  direction: rtl;
++}
++#view > .Dashboard .dashboard-widget-options {
++  margin: 0;
++  padding: var(--control-gap) 0.75rem;
++}
++#view > .Dashboard .dashboard-widget-options .cbi-checkbox {
++  height: auto;
++  min-height: 2.5rem;
++}
++#view > .Dashboard .dashboard-widget-options .cbi-checkbox + br {
++  display: none;
++}
+ [data-page="admin-status-processes"] #view > .table {
+   min-width: 0;
+   border-radius: var(--radius-card);
+@@ -6638,8 +6738,8 @@ pre.command-output {
+ [data-page="admin-status-overview"] #view > div:first-child {
+   gap: 0 !important;
+ }
+-[data-page="admin-status"] #view div:has(> .ifacebox > .ifacebox-body > img[src*="/icons/port_"]),
+-[data-page="admin-status-overview"] #view div:has(> .ifacebox > .ifacebox-body > img[src*="/icons/port_"]) {
++[data-page="admin-status"] #view div:is(:has(> .ifacebox > .ifacebox-body > img[src*=\"/icons/port_\"]), .argon-port-grid),
++[data-page="admin-status-overview"] #view div:is(:has(> .ifacebox > .ifacebox-body > img[src*=\"/icons/port_\"]), .argon-port-grid) {
+   display: grid !important;
+   grid-template-columns: repeat(auto-fit, minmax(min(100%, 8.5rem), 1fr)) !important;
+   align-items: stretch !important;
+@@ -6648,40 +6748,40 @@ pre.command-output {
+   margin: 0 !important;
+   padding: var(--field-gap) var(--section-inset);
+ }
+-[data-page="admin-status"] #view div:has(> .ifacebox > .ifacebox-body > img[src*="/icons/port_"]) > .ifacebox,
+-[data-page="admin-status-overview"] #view div:has(> .ifacebox > .ifacebox-body > img[src*="/icons/port_"]) > .ifacebox {
++[data-page="admin-status"] #view div:is(:has(> .ifacebox > .ifacebox-body > img[src*=\"/icons/port_\"]), .argon-port-grid) > .ifacebox,
++[data-page="admin-status-overview"] #view div:is(:has(> .ifacebox > .ifacebox-body > img[src*=\"/icons/port_\"]), .argon-port-grid) > .ifacebox {
+   width: auto !important;
+   min-width: 0 !important;
+   max-width: 100% !important;
+   margin: 0 !important;
+   text-align: center;
+ }
+-[data-page="admin-status"] #view div:has(> .ifacebox > .ifacebox-body > img[src*="/icons/port_"]) > .ifacebox > .ifacebox-head:first-child,
+-[data-page="admin-status-overview"] #view div:has(> .ifacebox > .ifacebox-body > img[src*="/icons/port_"]) > .ifacebox > .ifacebox-head:first-child {
++[data-page="admin-status"] #view div:is(:has(> .ifacebox > .ifacebox-body > img[src*=\"/icons/port_\"]), .argon-port-grid) > .ifacebox > .ifacebox-head:first-child,
++[data-page="admin-status-overview"] #view div:is(:has(> .ifacebox > .ifacebox-body > img[src*=\"/icons/port_\"]), .argon-port-grid) > .ifacebox > .ifacebox-head:first-child {
+   overflow-wrap: anywhere;
+ }
+-[data-page="admin-status"] #view div:has(> .ifacebox > .ifacebox-body > img[src*="/icons/port_"]) > .ifacebox .ifacebox-body,
+-[data-page="admin-status-overview"] #view div:has(> .ifacebox > .ifacebox-body > img[src*="/icons/port_"]) > .ifacebox .ifacebox-body {
++[data-page="admin-status"] #view div:is(:has(> .ifacebox > .ifacebox-body > img[src*=\"/icons/port_\"]), .argon-port-grid) > .ifacebox .ifacebox-body,
++[data-page="admin-status-overview"] #view div:is(:has(> .ifacebox > .ifacebox-body > img[src*=\"/icons/port_\"]), .argon-port-grid) > .ifacebox .ifacebox-body {
+   font-size: 0.75rem;
+   padding: 0.75rem 0.5rem;
+ }
+-[data-page="admin-status"] #view div:has(> .ifacebox > .ifacebox-body > img[src*="/icons/port_"]) > .ifacebox .ifacebox-body .cbi-tooltip-container,
+-[data-page="admin-status-overview"] #view div:has(> .ifacebox > .ifacebox-body > img[src*="/icons/port_"]) > .ifacebox .ifacebox-body .cbi-tooltip-container {
++[data-page="admin-status"] #view div:is(:has(> .ifacebox > .ifacebox-body > img[src*=\"/icons/port_\"]), .argon-port-grid) > .ifacebox .ifacebox-body .cbi-tooltip-container,
++[data-page="admin-status-overview"] #view div:is(:has(> .ifacebox > .ifacebox-body > img[src*=\"/icons/port_\"]), .argon-port-grid) > .ifacebox .ifacebox-body .cbi-tooltip-container {
+   font-size: inherit !important;
+   direction: ltr;
+   unicode-bidi: isolate;
+ }
+-[dir="rtl"] [data-page="admin-status"] #view div:has(> .ifacebox > .ifacebox-body > img[src*="/icons/port_"]) > .ifacebox .ifacebox-body .cbi-tooltip-container .cbi-tooltip,
+-[dir="rtl"] [data-page="admin-status-overview"] #view div:has(> .ifacebox > .ifacebox-body > img[src*="/icons/port_"]) > .ifacebox .ifacebox-body .cbi-tooltip-container .cbi-tooltip {
++[dir="rtl"] [data-page="admin-status"] #view div:is(:has(> .ifacebox > .ifacebox-body > img[src*=\"/icons/port_\"]), .argon-port-grid) > .ifacebox .ifacebox-body .cbi-tooltip-container .cbi-tooltip,
++[dir="rtl"] [data-page="admin-status-overview"] #view div:is(:has(> .ifacebox > .ifacebox-body > img[src*=\"/icons/port_\"]), .argon-port-grid) > .ifacebox .ifacebox-body .cbi-tooltip-container .cbi-tooltip {
+   direction: rtl;
+ }
+-[data-page="admin-status"] #view div:has(> .ifacebox > .ifacebox-body > img[src*="/icons/port_"]) > .ifacebox > .ifacebox-body:nth-child(2),
+-[data-page="admin-status-overview"] #view div:has(> .ifacebox > .ifacebox-body > img[src*="/icons/port_"]) > .ifacebox > .ifacebox-body:nth-child(2) {
++[data-page="admin-status"] #view div:is(:has(> .ifacebox > .ifacebox-body > img[src*=\"/icons/port_\"]), .argon-port-grid) > .ifacebox > .ifacebox-body:nth-child(2),
++[data-page="admin-status-overview"] #view div:is(:has(> .ifacebox > .ifacebox-body > img[src*=\"/icons/port_\"]), .argon-port-grid) > .ifacebox > .ifacebox-body:nth-child(2) {
+   flex-grow: 1;
+   overflow-wrap: anywhere;
+ }
+-[data-page="admin-status"] #view div:has(> .ifacebox > .ifacebox-body > img[src*="/icons/port_"]) > .ifacebox > .ifacebox-body:last-child,
+-[data-page="admin-status-overview"] #view div:has(> .ifacebox > .ifacebox-body > img[src*="/icons/port_"]) > .ifacebox > .ifacebox-body:last-child {
++[data-page="admin-status"] #view div:is(:has(> .ifacebox > .ifacebox-body > img[src*=\"/icons/port_\"]), .argon-port-grid) > .ifacebox > .ifacebox-body:last-child,
++[data-page="admin-status-overview"] #view div:is(:has(> .ifacebox > .ifacebox-body > img[src*=\"/icons/port_\"]), .argon-port-grid) > .ifacebox > .ifacebox-body:last-child {
+   padding: 0.5rem 0.625rem;
+ }
+ [data-page="admin-status"] .argon-port-traffic,
+@@ -9058,6 +9158,12 @@ pre.command-output {
+   }
+ }
+ @media screen and (min-width: 600px) {
++  @supports (-moz-appearance: none) {
++    * {
++      scrollbar-width: thin;
++      scrollbar-color: var(--primary) transparent;
++    }
++  }
+   ::-webkit-scrollbar {
+     width: 10px;
+     height: 10px;
+diff --git a/feeds/luci/themes/luci-theme-argon/htdocs/luci-static/argon/icon/pause.svg b/feeds/luci/themes/luci-theme-argon/htdocs/luci-static/argon/icon/pause.svg
+new file mode 100644
+index 0000000..436af37
+--- /dev/null
++++ b/feeds/luci/themes/luci-theme-argon/htdocs/luci-static/argon/icon/pause.svg
+@@ -0,0 +1 @@
++<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M6 4h4v16H6zM14 4h4v16h-4z"/></svg>
+diff --git a/feeds/luci/themes/luci-theme-argon/htdocs/luci-static/argon/icon/play.svg b/feeds/luci/themes/luci-theme-argon/htdocs/luci-static/argon/icon/play.svg
+new file mode 100644
+index 0000000..d118002
+--- /dev/null
++++ b/feeds/luci/themes/luci-theme-argon/htdocs/luci-static/argon/icon/play.svg
+@@ -0,0 +1 @@
++<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="m8 4 12 8-12 8z"/></svg>
+diff --git a/feeds/luci/themes/luci-theme-argon/htdocs/luci-static/resources/argon-appearance.js b/feeds/luci/themes/luci-theme-argon/htdocs/luci-static/resources/argon-appearance.js
+index f3cc437..235bf69 100644
+--- a/feeds/luci/themes/luci-theme-argon/htdocs/luci-static/resources/argon-appearance.js
++++ b/feeds/luci/themes/luci-theme-argon/htdocs/luci-static/resources/argon-appearance.js
+@@ -60,7 +60,10 @@ return baseclass.extend({
+ 		this.panel = E('fieldset', { id: 'argon-appearance-options', 'class': 'argon-appearance-panel', hidden: true }, [
+ 			E('legend', { 'class': 'visually-hidden' }, _('Theme mode')),
+ 			...this.radios.map(function(radio) {
+-				return E('label', { 'class': 'argon-appearance-option', 'data-mode': radio.value }, [
++				return E('label', {
++					'class': 'argon-appearance-option', 'data-mode': radio.value,
++					'aria-disabled': !this.writable ? 'true' : null
++				}, [
+ 					radio, E('span', {}, this.labels[radio.value])
+ 				]);
+ 			}.bind(this)),
+diff --git a/feeds/luci/themes/luci-theme-argon/htdocs/luci-static/resources/argon-compat.js b/feeds/luci/themes/luci-theme-argon/htdocs/luci-static/resources/argon-compat.js
+new file mode 100644
+index 0000000..0fe9f5c
+--- /dev/null
++++ b/feeds/luci/themes/luci-theme-argon/htdocs/luci-static/resources/argon-compat.js
+@@ -0,0 +1,54 @@
++'use strict';
++'require baseclass';
++
++// Firefox ESR 115 predates :has(). Keep common form controls usable without
++// changing browser preferences or running a selector polyfill on every page.
++return baseclass.extend({
++	__init__: function() {
++		if (CSS.supports('selector(:has(*))'))
++			return;
++		var root = document.body;
++		if (!root)
++			return;
++		var sectionSelector = '.cbi-tblsection, .cbi-tblsection .table';
++		var update = function(records) {
++			var groups = new Set(), sections = new Set();
++			var collect = function(node) {
++				if (node.nodeType !== 1)
++					return;
++				if (node.matches('.control-group'))
++					groups.add(node);
++				if (node.matches(sectionSelector))
++					sections.add(node);
++				node.querySelectorAll('.control-group').forEach(function(group) { groups.add(group); });
++				node.querySelectorAll(sectionSelector).forEach(function(section) { sections.add(section); });
++			};
++			if (!records)
++				collect(root);
++			else records.forEach(function(record) {
++				// Counter/text updates cannot change these structural relationships.
++				if (!Array.from(record.addedNodes).concat(Array.from(record.removedNodes))
++					.some(function(node) { return node.nodeType === 1; }))
++					return;
++				for (var parent = record.target; parent && parent !== root; parent = parent.parentElement) {
++					if (parent.matches('.control-group'))
++						groups.add(parent);
++					if (parent.matches(sectionSelector))
++						sections.add(parent);
++				}
++				record.addedNodes.forEach(collect);
++			});
++			groups.forEach(function(group) {
++				var input = group.firstElementChild;
++				group.classList.toggle('argon-joined-control', !!(input && input.matches('input') &&
++					input.nextElementSibling && input.nextElementSibling.matches('.cbi-button')));
++			});
++			sections.forEach(function(section) {
++				section.classList.toggle('argon-dropdown-section', !!section.querySelector('.cbi-dropdown'));
++			});
++		};
++		// Observe native LuCI renders and modal contents, including dependent fields.
++		new MutationObserver(update).observe(root, { childList: true, subtree: true });
++		update();
++	}
++});
+diff --git a/feeds/luci/themes/luci-theme-argon/htdocs/luci-static/resources/argon-graphs.js b/feeds/luci/themes/luci-theme-argon/htdocs/luci-static/resources/argon-graphs.js
+index 1807abd..afcb970 100644
+--- a/feeds/luci/themes/luci-theme-argon/htdocs/luci-static/resources/argon-graphs.js
++++ b/feeds/luci/themes/luci-theme-argon/htdocs/luci-static/resources/argon-graphs.js
+@@ -13,6 +13,7 @@ return baseclass.extend({
+ 		var frame = null;
+ 		var update = function() {
+ 			frame = null;
++			var pending = [];
+ 			view.querySelectorAll('svg').forEach(function(svg) {
+ 				if (graphs.has(svg) || svg.hasAttribute('viewBox'))
+ 					return;
+@@ -28,11 +29,16 @@ return baseclass.extend({
+ 				if (width <= 0 || !(height > 0))
+ 					return;
+ 
+-				graphs.set(svg, width);
+-				svg.setAttribute('viewBox', '0 0 ' + width + ' ' + height);
+-				svg.setAttribute('preserveAspectRatio', 'none');
++				pending.push({ svg: svg, width: width, height: height });
+ 			});
+ 
++			pending.forEach(function(graph) {
++				graphs.set(graph.svg, graph.width);
++				graph.svg.setAttribute('viewBox', '0 0 ' + graph.width + ' ' + graph.height);
++				graph.svg.setAttribute('preserveAspectRatio', 'none');
++			});
++
++			var labels = [];
+ 			graphs.forEach(function(width, svg) {
+ 				if (!svg.isConnected) {
+ 					graphs.delete(svg);
+@@ -47,18 +53,26 @@ return baseclass.extend({
+ 				svg.querySelectorAll('text').forEach(function(text) {
+ 					var x = parseFloat(text.getAttribute('x')) || 0;
+ 					var offset = x * (1 - inverse);
+-					var transform = function(shift) {
+-						text.style.transform = 'translateX(' + shift + 'px) scaleX(' + inverse + ')';
+-					};
+-					text.style.transformOrigin = '0 0';
+-					transform(offset);
+-					var label = text.getBoundingClientRect();
+-					var shift = Math.max(0, bounds.left + 4 - label.left) -
+-						Math.max(0, label.right - bounds.right + 4);
+-					if (shift)
+-						transform(offset + shift / ratio);
++					labels.push({ text: text, bounds: bounds, ratio: ratio, inverse: inverse, offset: offset });
+ 				});
+ 			});
++
++			// Apply every provisional transform before measuring any label. Alternating
++			// a style write and a bounds read forces layout once per chart label.
++			labels.forEach(function(label) {
++				label.text.style.transformOrigin = '0 0';
++				label.text.style.transform = 'translateX(' + label.offset + 'px) scaleX(' + label.inverse + ')';
++			});
++			labels.forEach(function(label) {
++				var bounds = label.text.getBoundingClientRect();
++				label.shift = Math.max(0, label.bounds.left + 4 - bounds.left) -
++					Math.max(0, bounds.right - label.bounds.right + 4);
++			});
++			labels.forEach(function(label) {
++				if (label.shift)
++					label.text.style.transform = 'translateX(' + (label.offset + label.shift / label.ratio) +
++						'px) scaleX(' + label.inverse + ')';
++			});
+ 		};
+ 		var schedule = function() {
+ 			if (frame === null)
+diff --git a/feeds/luci/themes/luci-theme-argon/htdocs/luci-static/resources/argon-overview.js b/feeds/luci/themes/luci-theme-argon/htdocs/luci-static/resources/argon-overview.js
+index ce38530..3026273 100644
+--- a/feeds/luci/themes/luci-theme-argon/htdocs/luci-static/resources/argon-overview.js
++++ b/feeds/luci/themes/luci-theme-argon/htdocs/luci-static/resources/argon-overview.js
+@@ -11,7 +11,12 @@ return baseclass.extend({
+ 		var frame = null;
+ 		var update = function() {
+ 			frame = null;
+-			view.querySelectorAll('.ifacebox:has(> .ifacebox-body > img[src*="/icons/port_"]) > .ifacebox-body:last-child > .cbi-tooltip-container').forEach(function(container) {
++			view.querySelectorAll('.ifacebox > .ifacebox-body > img[src*="/icons/port_"]').forEach(function(icon) {
++				var box = icon.parentNode.parentNode;
++				box.parentNode.classList.add('argon-port-grid');
++				var container = box.lastElementChild.querySelector('.cbi-tooltip-container');
++				if (!container)
++					return;
+ 				if (container.querySelector('.argon-port-traffic'))
+ 					return;
+ 
+diff --git a/feeds/luci/themes/luci-theme-argon/htdocs/luci-static/resources/view/argon-config.js b/feeds/luci/themes/luci-theme-argon/htdocs/luci-static/resources/view/argon-config.js
+index c46ba9d..f3c82de 100644
+--- a/feeds/luci/themes/luci-theme-argon/htdocs/luci-static/resources/view/argon-config.js
++++ b/feeds/luci/themes/luci-theme-argon/htdocs/luci-static/resources/view/argon-config.js
+@@ -111,7 +111,7 @@ return view.extend({
+ 		let m, s, o;
+ 
+ 		m = new form.Map('argon', _('Argon theme configuration'),
+-			_('Here you can set the blur and transparency of the login page of argon theme, and manage the background pictures and videos. Chrome is recommended.'));
++			_('Here you can set the blur and transparency of the login page of argon theme, and manage the background pictures and videos.'));
+ 
+ 		s = m.section(form.TypedSection, 'global', _('Theme configuration'));
+ 		s.addremove = false;
+diff --git a/feeds/luci/themes/luci-theme-argon/less/components/accessibility.less b/feeds/luci/themes/luci-theme-argon/less/components/accessibility.less
+index de16f70..59f0f03 100644
+--- a/feeds/luci/themes/luci-theme-argon/less/components/accessibility.less
++++ b/feeds/luci/themes/luci-theme-argon/less/components/accessibility.less
+@@ -12,6 +12,25 @@
+   border: 0;
+ }
+ 
++.skip-link {
++  position: fixed;
++  z-index: 1200;
++  inset-block-start: var(--control-gap);
++  inset-inline-start: var(--page-gutter);
++  padding: .5rem .75rem;
++  color: var(--text-strong);
++  background: var(--surface-panel);
++  border: 1px solid var(--border-color);
++  border-radius: var(--radius-control);
++  transform: translateY(calc(-100% - var(--control-gap)));
++
++  &:focus {
++    transform: none;
++    outline: 2px solid var(--focus-ring);
++    outline-offset: 2px;
++  }
++}
++
+ @media (prefers-reduced-motion: reduce) {
+   .main-left,
+   .main-right,
+diff --git a/feeds/luci/themes/luci-theme-argon/less/components/appearance.less b/feeds/luci/themes/luci-theme-argon/less/components/appearance.less
+index dfc61df..29aef9f 100644
+--- a/feeds/luci/themes/luci-theme-argon/less/components/appearance.less
++++ b/feeds/luci/themes/luci-theme-argon/less/components/appearance.less
+@@ -162,21 +162,12 @@ header .header-actions {
+         overflow-wrap: anywhere;
+       }
+ 
+-      &:has(input:checked) {
+-        color: var(--dropdown-selected-text);
+-        background: var(--dropdown-selected-bg);
+-
+-        &::after {
+-          visibility: visible;
+-        }
+-      }
+-
+-      &:has(input:focus-visible) {
++      &:focus-within {
+         outline: 2px solid var(--focus-ring);
+         outline-offset: -2px;
+       }
+ 
+-      &:has(input:disabled) {
++      &[aria-disabled="true"] {
+         cursor: default;
+         opacity: .6;
+       }
+@@ -201,7 +192,7 @@ header .header-actions {
+       background-color: var(--surface-active);
+     }
+ 
+-    .argon-appearance-option:has(input:not(:disabled)):not(:has(input:checked)):hover {
++    .argon-appearance-option:not([aria-disabled="true"]):hover {
+       background: var(--dropdown-hover-bg);
+     }
+   }
+@@ -226,6 +217,19 @@ header .header-actions {
+   }
+ }
+ 
++// The existing mode attribute tracks the checked radio, including save rollback.
++// Explicit selectors also preserve selection and its checkmark on Firefox ESR 115.
++#argon-appearance[data-mode="light"] .argon-appearance-option[data-mode="light"],
++#argon-appearance[data-mode="dark"] .argon-appearance-option[data-mode="dark"],
++#argon-appearance[data-mode="normal"] .argon-appearance-option[data-mode="normal"] {
++  color: var(--dropdown-selected-text);
++  background: var(--dropdown-selected-bg);
++
++  &::after {
++    visibility: visible;
++  }
++}
++
+ // Explicit selectors keep these rules scoped when compiled with Less 4.
+ // Native hidden semantics still remove the closed menu from focus and hit testing.
+ @starting-style {
+diff --git a/feeds/luci/themes/luci-theme-argon/less/components/feedback.less b/feeds/luci/themes/luci-theme-argon/less/components/feedback.less
+index d89d89f..3822e8a 100644
+--- a/feeds/luci/themes/luci-theme-argon/less/components/feedback.less
++++ b/feeds/luci/themes/luci-theme-argon/less/components/feedback.less
+@@ -152,6 +152,9 @@
+ .alert-message {
+   transform: none;
+   position: static;
++  // Inline banners can be flex items, where z-index applies even without positioning.
++  // Keep them below dropdowns instead of inheriting the fixed alert's overlay layer.
++  z-index: auto;
+   transition: opacity .4s ease;
+ 
+   &.fade-out {
+diff --git a/feeds/luci/themes/luci-theme-argon/less/components/forms.less b/feeds/luci/themes/luci-theme-argon/less/components/forms.less
+index eeffec5..fe505bf 100644
+--- a/feeds/luci/themes/luci-theme-argon/less/components/forms.less
++++ b/feeds/luci/themes/luci-theme-argon/less/components/forms.less
+@@ -212,7 +212,9 @@
+   }
+ }
+ 
+-.control-group:has(> input:first-child + .cbi-button) {
++// Interpolation preserves the forgiving selector list with the pinned Less 4 parser.
++@joined-control-selector: ~":is(:has(> input:first-child + .cbi-button), .argon-joined-control)";
++.control-group@{joined-control-selector} {
+   flex-wrap: nowrap;
+   gap: 0;
+ 
+diff --git a/feeds/luci/themes/luci-theme-argon/less/components/tables.less b/feeds/luci/themes/luci-theme-argon/less/components/tables.less
+index 33c0eae..dc096bf 100644
+--- a/feeds/luci/themes/luci-theme-argon/less/components/tables.less
++++ b/feeds/luci/themes/luci-theme-argon/less/components/tables.less
+@@ -122,6 +122,15 @@
+ 
+ .cbi-tblsection {
+   overflow-x: auto;
++
++  // A horizontal scroller also computes overflow-y:auto. LuCI then sizes
++  // dropdowns against this short section instead of the page or modal.
++  // Native responsive tables wrap their fields when the viewport narrows.
++  @dropdown-section-selector: ~":is(:has(.cbi-dropdown), .argon-dropdown-section)";
++  &@{dropdown-section-selector},
++  .table@{dropdown-section-selector} {
++    overflow: visible;
++  }
+ }
+ 
+ table {
+diff --git a/feeds/luci/themes/luci-theme-argon/less/layout.less b/feeds/luci/themes/luci-theme-argon/less/layout.less
+index b5ba9a2..efa65a0 100644
+--- a/feeds/luci/themes/luci-theme-argon/less/layout.less
++++ b/feeds/luci/themes/luci-theme-argon/less/layout.less
+@@ -517,7 +517,8 @@ footer {
+         box-shadow: var(--section-shadow);
+     }
+ 
+-    &>div:first-child:not(.cbi-map) {
++    // The native dashboard supplies its own grid layout.
++    &>div:first-child:not(.cbi-map, .Dashboard) {
+         display: flex;
+         flex-direction: column;
+         min-width: 0;
+diff --git a/feeds/luci/themes/luci-theme-argon/less/pages/dashboard.less b/feeds/luci/themes/luci-theme-argon/less/pages/dashboard.less
+index da19bf7..963db26 100644
+--- a/feeds/luci/themes/luci-theme-argon/less/pages/dashboard.less
++++ b/feeds/luci/themes/luci-theme-argon/less/pages/dashboard.less
+@@ -25,6 +25,11 @@
+         min-width: ~"min(100%, 18rem)";
+         padding-block-end: var(--field-gap);
+ 
++        // Newer dashboard styles reset chart headings after the theme loads.
++        > h3:first-child {
++            padding: var(--field-gap) var(--section-inset);
++        }
++
+         // Keep the native full-width heading; inset its chart and legend.
+         > :not(h3:first-child) {
+             margin-inline: var(--section-inset);
+@@ -77,4 +82,58 @@
+     [data-tab="layout"] .cbi-page-actions {
+         padding: var(--field-gap) var(--section-inset);
+     }
++
++    .dashboard-widget-list > .item {
++        align-items: flex-start;
++        // Dashboard entries support dragging and contain native form controls.
++        pointer-events: auto;
++
++        // Fill the row so the delete button stays at LuCI's right-edge hit area.
++        > span {
++            flex: 1 1 auto;
++            width: auto;
++        }
++    }
++
++    .dashboard-widget-settings {
++        flex: 1 1 0;
++        min-width: 0;
++        border: 1px solid var(--border-color);
++        border-radius: var(--radius-control) 0 0 var(--radius-control);
++
++        > summary {
++            box-sizing: border-box;
++            min-height: calc(2.5rem - 2px);
++            padding: .5rem .75rem;
++            line-height: 1.5;
++            list-style-position: inside;
++            overflow-wrap: anywhere;
++
++            &:focus-visible {
++                outline: 2px solid var(--focus-ring);
++                outline-offset: -2px;
++                border-radius: inherit;
++            }
++        }
++
++        // The item remains LTR because its native delete hit area is physical.
++        [dir="rtl"] & {
++            direction: rtl;
++        }
++    }
++
++    .dashboard-widget-options {
++        margin: 0;
++        padding: var(--control-gap) .75rem;
++
++        .cbi-checkbox {
++            height: auto;
++            min-height: 2.5rem;
++        }
++
++        // Each checkbox is already a flex row; native <br> nodes add empty rows.
++        .cbi-checkbox + br {
++            display: none;
++        }
++    }
+ }
+diff --git a/feeds/luci/themes/luci-theme-argon/less/pages/overview.less b/feeds/luci/themes/luci-theme-argon/less/pages/overview.less
+index 23ceaab..7c8ac6b 100644
+--- a/feeds/luci/themes/luci-theme-argon/less/pages/overview.less
++++ b/feeds/luci/themes/luci-theme-argon/less/pages/overview.less
+@@ -76,7 +76,8 @@
+   }
+ 
+   // Match native port cards by their icons, independently of inline CSS formatting.
+-  #view div:has(> .ifacebox > .ifacebox-body > img[src*="/icons/port_"]) {
++  @port-grid-selector: ~":is(:has(> .ifacebox > .ifacebox-body > img[src*=\"/icons/port_\"]), .argon-port-grid)";
++  #view div@{port-grid-selector} {
+     display: grid !important;
+     grid-template-columns: repeat(auto-fit, minmax(~"min(100%, 8.5rem)", 1fr)) !important;
+     // ImmortalWrt centers fixed-width cards; let both native variants fill a row.
+diff --git a/feeds/luci/themes/luci-theme-argon/less/responsive.less b/feeds/luci/themes/luci-theme-argon/less/responsive.less
+index a276a89..a0ba6a4 100644
+--- a/feeds/luci/themes/luci-theme-argon/less/responsive.less
++++ b/feeds/luci/themes/luci-theme-argon/less/responsive.less
+@@ -556,6 +556,14 @@
+ // ==========================================================================
+ 
+ @media screen and (min-width: 600px) {
++    // Firefox uses the standard scrollbar API rather than WebKit pseudo-elements.
++    @supports (-moz-appearance: none) {
++        * {
++            scrollbar-width: thin;
++            scrollbar-color: var(--primary) transparent;
++        }
++    }
++
+     ::-webkit-scrollbar {
+         width: 10px;
+         height: 10px;
+diff --git a/feeds/luci/themes/luci-theme-argon/less/sysauth.less b/feeds/luci/themes/luci-theme-argon/less/sysauth.less
+index b5b6c4b..57e0b91 100644
+--- a/feeds/luci/themes/luci-theme-argon/less/sysauth.less
++++ b/feeds/luci/themes/luci-theme-argon/less/sysauth.less
+@@ -42,24 +42,60 @@
+         }
+     }
+ 
+-    .volume-control {
++    .background-controls {
+         position: fixed;
+-        top: 1rem;
+-        right: 1rem;
+-        width: 1.5rem;
+-        height: 1.5rem;
++        inset-block-start: var(--field-gap);
++        inset-inline-end: var(--field-gap);
++        display: flex;
++        gap: var(--control-gap);
+         z-index: 5000;
+-        cursor: pointer;
+-        border: 0 !important;
+-        background: url(../img/volume_high.svg) no-repeat center/contain;
+ 
+-        &:focus-visible {
+-            outline: 2px solid var(--focus-ring);
+-            outline-offset: 4px;
++        > button {
++            display: grid;
++            place-items: center;
++            min-width: 2.5rem;
++            min-height: 2.5rem;
++            padding: .5rem;
++            cursor: pointer;
++            background: var(--surface-panel);
++            color: var(--text-strong);
++
++            &::before {
++                content: '';
++                width: 1rem;
++                height: 1rem;
++                background-color: currentColor;
++                mask: var(--background-control-icon) center / contain no-repeat;
++                -webkit-mask: var(--background-control-icon) center / contain no-repeat;
++            }
++
++            &:focus-visible {
++                outline: 2px solid var(--focus-ring);
++                outline-offset: 2px;
++            }
++
++            @media (forced-colors: active) {
++                &::before {
++                    forced-color-adjust: none;
++                    background-color: ButtonText;
++                }
++            }
++        }
++    }
++
++    .playback-control {
++        --background-control-icon: url(../icon/play.svg);
++
++        &.playing {
++            --background-control-icon: url(../icon/pause.svg);
+         }
++    }
++
++    .volume-control {
++        --background-control-icon: url(../img/volume_high.svg);
+ 
+         &.mute {
+-            background-image: url(../img/volume_off.svg);
++            --background-control-icon: url(../img/volume_off.svg);
+         }
+     }
+ 
+diff --git a/feeds/luci/themes/luci-theme-argon/po/ar/argon-config.po b/feeds/luci/themes/luci-theme-argon/po/ar/argon-config.po
+index a7fc6da..49a4628 100644
+--- a/feeds/luci/themes/luci-theme-argon/po/ar/argon-config.po
++++ b/feeds/luci/themes/luci-theme-argon/po/ar/argon-config.po
+@@ -163,7 +163,7 @@ msgid "Grant UCI access for luci-theme-argon"
+ msgstr "السماح للسمة luci-theme-argon بالوصول إلى UCI"
+ 
+ #: htdocs/luci-static/resources/view/argon-config.js:114
+-msgid "Here you can set the blur and transparency of the login page of argon theme, and manage the background pictures and videos. Chrome is recommended."
++msgid "Here you can set the blur and transparency of the login page of argon theme, and manage the background pictures and videos."
+ msgstr "يمكنك هنا ضبط التمويه والشفافية لصفحة تسجيل الدخول في سمة Argon، وإدارة صور الخلفية ومقاطع الفيديو. يُنصح باستخدام Chrome."
+ 
+ #: htdocs/luci-static/resources/argon/branding.js:60
+@@ -380,3 +380,15 @@ msgstr "[الوضع الداكن] الشفافية"
+ #: htdocs/luci-static/resources/view/argon-config.js:47
+ msgid "valid HEX color value"
+ msgstr "قيمة لون صالحة بصيغة HEX"
++
++#: ucode/template/themes/argon/login_background.ut
++msgid "Play background video"
++msgstr "تشغيل فيديو الخلفية"
++
++#: ucode/template/themes/argon/login_background.ut
++msgid "Pause background video"
++msgstr "إيقاف فيديو الخلفية مؤقتًا"
++
++#: ucode/template/themes/argon/header.ut
++msgid "Skip to content"
++msgstr "تخطي إلى المحتوى"
+diff --git a/feeds/luci/themes/luci-theme-argon/po/de/argon-config.po b/feeds/luci/themes/luci-theme-argon/po/de/argon-config.po
+index 89b7466..ff6b57c 100644
+--- a/feeds/luci/themes/luci-theme-argon/po/de/argon-config.po
++++ b/feeds/luci/themes/luci-theme-argon/po/de/argon-config.po
+@@ -163,7 +163,7 @@ msgid "Grant UCI access for luci-theme-argon"
+ msgstr "UCI-Zugriff für luci-theme-argon erlauben"
+ 
+ #: htdocs/luci-static/resources/view/argon-config.js:114
+-msgid "Here you can set the blur and transparency of the login page of argon theme, and manage the background pictures and videos. Chrome is recommended."
++msgid "Here you can set the blur and transparency of the login page of argon theme, and manage the background pictures and videos."
+ msgstr "Hier können Sie die Unschärfe und Transparenz der Anmeldeseite des Argon-Designs einstellen sowie Hintergrundbilder und -videos verwalten. Chrome wird empfohlen."
+ 
+ #: htdocs/luci-static/resources/argon/branding.js:60
+@@ -380,3 +380,15 @@ msgstr "[Dunkler Modus] Transparenz"
+ #: htdocs/luci-static/resources/view/argon-config.js:47
+ msgid "valid HEX color value"
+ msgstr "gültiger HEX-Farbwert"
++
++#: ucode/template/themes/argon/login_background.ut
++msgid "Play background video"
++msgstr "Hintergrundvideo abspielen"
++
++#: ucode/template/themes/argon/login_background.ut
++msgid "Pause background video"
++msgstr "Hintergrundvideo pausieren"
++
++#: ucode/template/themes/argon/header.ut
++msgid "Skip to content"
++msgstr "Zum Inhalt springen"
+diff --git a/feeds/luci/themes/luci-theme-argon/po/es/argon-config.po b/feeds/luci/themes/luci-theme-argon/po/es/argon-config.po
+index 5fcb20d..eaa471a 100644
+--- a/feeds/luci/themes/luci-theme-argon/po/es/argon-config.po
++++ b/feeds/luci/themes/luci-theme-argon/po/es/argon-config.po
+@@ -165,7 +165,7 @@ msgid "Grant UCI access for luci-theme-argon"
+ msgstr "Permitir el acceso a UCI a luci-theme-argon"
+ 
+ #: htdocs/luci-static/resources/view/argon-config.js:114
+-msgid "Here you can set the blur and transparency of the login page of argon theme, and manage the background pictures and videos. Chrome is recommended."
++msgid "Here you can set the blur and transparency of the login page of argon theme, and manage the background pictures and videos."
+ msgstr "Aquí puede configurar el desenfoque y la transparencia de la página de inicio de sesión del tema Argon y administrar las imágenes y los vídeos de fondo. Se recomienda Chrome."
+ 
+ #: htdocs/luci-static/resources/argon/branding.js:60
+@@ -382,3 +382,15 @@ msgstr "[Modo oscuro] Transparencia"
+ #: htdocs/luci-static/resources/view/argon-config.js:47
+ msgid "valid HEX color value"
+ msgstr "un valor de color HEX válido"
++
++#: ucode/template/themes/argon/login_background.ut
++msgid "Play background video"
++msgstr "Reproducir el vídeo de fondo"
++
++#: ucode/template/themes/argon/login_background.ut
++msgid "Pause background video"
++msgstr "Pausar el vídeo de fondo"
++
++#: ucode/template/themes/argon/header.ut
++msgid "Skip to content"
++msgstr "Saltar al contenido"
+diff --git a/feeds/luci/themes/luci-theme-argon/po/fr/argon-config.po b/feeds/luci/themes/luci-theme-argon/po/fr/argon-config.po
+index 1c5ff0a..fbc292d 100644
+--- a/feeds/luci/themes/luci-theme-argon/po/fr/argon-config.po
++++ b/feeds/luci/themes/luci-theme-argon/po/fr/argon-config.po
+@@ -163,7 +163,7 @@ msgid "Grant UCI access for luci-theme-argon"
+ msgstr "Autoriser l’accès à UCI pour luci-theme-argon"
+ 
+ #: htdocs/luci-static/resources/view/argon-config.js:114
+-msgid "Here you can set the blur and transparency of the login page of argon theme, and manage the background pictures and videos. Chrome is recommended."
++msgid "Here you can set the blur and transparency of the login page of argon theme, and manage the background pictures and videos."
+ msgstr "Vous pouvez régler ici le flou et la transparence de la page de connexion du thème Argon, ainsi que gérer les images et les vidéos d’arrière-plan. Chrome est recommandé."
+ 
+ #: htdocs/luci-static/resources/argon/branding.js:60
+@@ -380,3 +380,15 @@ msgstr "[Mode sombre] Transparence"
+ #: htdocs/luci-static/resources/view/argon-config.js:47
+ msgid "valid HEX color value"
+ msgstr "une valeur de couleur HEX valide"
++
++#: ucode/template/themes/argon/login_background.ut
++msgid "Play background video"
++msgstr "Lire la vidéo d’arrière-plan"
++
++#: ucode/template/themes/argon/login_background.ut
++msgid "Pause background video"
++msgstr "Mettre la vidéo d’arrière-plan en pause"
++
++#: ucode/template/themes/argon/header.ut
++msgid "Skip to content"
++msgstr "Aller au contenu"
+diff --git a/feeds/luci/themes/luci-theme-argon/po/it/argon-config.po b/feeds/luci/themes/luci-theme-argon/po/it/argon-config.po
+index 3318ad7..8678042 100644
+--- a/feeds/luci/themes/luci-theme-argon/po/it/argon-config.po
++++ b/feeds/luci/themes/luci-theme-argon/po/it/argon-config.po
+@@ -163,7 +163,7 @@ msgid "Grant UCI access for luci-theme-argon"
+ msgstr "Consenti l’accesso UCI a luci-theme-argon"
+ 
+ #: htdocs/luci-static/resources/view/argon-config.js:114
+-msgid "Here you can set the blur and transparency of the login page of argon theme, and manage the background pictures and videos. Chrome is recommended."
++msgid "Here you can set the blur and transparency of the login page of argon theme, and manage the background pictures and videos."
+ msgstr "Qui puoi impostare la sfocatura e la trasparenza della pagina di accesso del tema Argon e gestire le immagini e i video di sfondo. Si consiglia Chrome."
+ 
+ #: htdocs/luci-static/resources/argon/branding.js:60
+@@ -380,3 +380,15 @@ msgstr "[Modalità scura] Trasparenza"
+ #: htdocs/luci-static/resources/view/argon-config.js:47
+ msgid "valid HEX color value"
+ msgstr "un valore di colore HEX valido"
++
++#: ucode/template/themes/argon/login_background.ut
++msgid "Play background video"
++msgstr "Riproduci il video di sfondo"
++
++#: ucode/template/themes/argon/login_background.ut
++msgid "Pause background video"
++msgstr "Metti in pausa il video di sfondo"
++
++#: ucode/template/themes/argon/header.ut
++msgid "Skip to content"
++msgstr "Vai al contenuto"
+diff --git a/feeds/luci/themes/luci-theme-argon/po/ja/argon-config.po b/feeds/luci/themes/luci-theme-argon/po/ja/argon-config.po
+index 3e872c2..3160f81 100644
+--- a/feeds/luci/themes/luci-theme-argon/po/ja/argon-config.po
++++ b/feeds/luci/themes/luci-theme-argon/po/ja/argon-config.po
+@@ -163,7 +163,7 @@ msgid "Grant UCI access for luci-theme-argon"
+ msgstr "luci-theme-argon に UCI へのアクセスを許可"
+ 
+ #: htdocs/luci-static/resources/view/argon-config.js:114
+-msgid "Here you can set the blur and transparency of the login page of argon theme, and manage the background pictures and videos. Chrome is recommended."
++msgid "Here you can set the blur and transparency of the login page of argon theme, and manage the background pictures and videos."
+ msgstr "Argon テーマのログインページのぼかしと透明度を設定し、背景画像や動画を管理できます。Chrome の使用を推奨します。"
+ 
+ #: htdocs/luci-static/resources/argon/branding.js:60
+@@ -380,3 +380,15 @@ msgstr "[ダークモード] 透明度"
+ #: htdocs/luci-static/resources/view/argon-config.js:47
+ msgid "valid HEX color value"
+ msgstr "有効な 16 進数のカラーコード"
++
++#: ucode/template/themes/argon/login_background.ut
++msgid "Play background video"
++msgstr "背景動画を再生"
++
++#: ucode/template/themes/argon/login_background.ut
++msgid "Pause background video"
++msgstr "背景動画を一時停止"
++
++#: ucode/template/themes/argon/header.ut
++msgid "Skip to content"
++msgstr "コンテンツへスキップ"
+diff --git a/feeds/luci/themes/luci-theme-argon/po/ko/argon-config.po b/feeds/luci/themes/luci-theme-argon/po/ko/argon-config.po
+index 02b0714..386ff6d 100644
+--- a/feeds/luci/themes/luci-theme-argon/po/ko/argon-config.po
++++ b/feeds/luci/themes/luci-theme-argon/po/ko/argon-config.po
+@@ -163,7 +163,7 @@ msgid "Grant UCI access for luci-theme-argon"
+ msgstr "luci-theme-argon에 UCI 접근 허용"
+ 
+ #: htdocs/luci-static/resources/view/argon-config.js:114
+-msgid "Here you can set the blur and transparency of the login page of argon theme, and manage the background pictures and videos. Chrome is recommended."
++msgid "Here you can set the blur and transparency of the login page of argon theme, and manage the background pictures and videos."
+ msgstr "Argon 테마 로그인 페이지의 흐림 효과와 투명도를 설정하고 배경 이미지와 동영상을 관리할 수 있습니다. Chrome 사용을 권장합니다."
+ 
+ #: htdocs/luci-static/resources/argon/branding.js:60
+@@ -380,3 +380,15 @@ msgstr "[다크 모드] 투명도"
+ #: htdocs/luci-static/resources/view/argon-config.js:47
+ msgid "valid HEX color value"
+ msgstr "유효한 16진수 색상 값"
++
++#: ucode/template/themes/argon/login_background.ut
++msgid "Play background video"
++msgstr "배경 동영상 재생"
++
++#: ucode/template/themes/argon/login_background.ut
++msgid "Pause background video"
++msgstr "배경 동영상 일시 중지"
++
++#: ucode/template/themes/argon/header.ut
++msgid "Skip to content"
++msgstr "본문으로 건너뛰기"
+diff --git a/feeds/luci/themes/luci-theme-argon/po/nl/argon-config.po b/feeds/luci/themes/luci-theme-argon/po/nl/argon-config.po
+index 0a43271..da68ae0 100644
+--- a/feeds/luci/themes/luci-theme-argon/po/nl/argon-config.po
++++ b/feeds/luci/themes/luci-theme-argon/po/nl/argon-config.po
+@@ -163,7 +163,7 @@ msgid "Grant UCI access for luci-theme-argon"
+ msgstr "UCI-toegang verlenen aan luci-theme-argon"
+ 
+ #: htdocs/luci-static/resources/view/argon-config.js:114
+-msgid "Here you can set the blur and transparency of the login page of argon theme, and manage the background pictures and videos. Chrome is recommended."
++msgid "Here you can set the blur and transparency of the login page of argon theme, and manage the background pictures and videos."
+ msgstr "Hier kunt u de vervaging en transparantie van de aanmeldpagina van het Argon-thema instellen en achtergrondafbeeldingen en -video’s beheren. Chrome wordt aanbevolen."
+ 
+ #: htdocs/luci-static/resources/argon/branding.js:60
+@@ -380,3 +380,15 @@ msgstr "[Donkere modus] Transparantie"
+ #: htdocs/luci-static/resources/view/argon-config.js:47
+ msgid "valid HEX color value"
+ msgstr "een geldige HEX-kleurwaarde"
++
++#: ucode/template/themes/argon/login_background.ut
++msgid "Play background video"
++msgstr "Achtergrondvideo afspelen"
++
++#: ucode/template/themes/argon/login_background.ut
++msgid "Pause background video"
++msgstr "Achtergrondvideo pauzeren"
++
++#: ucode/template/themes/argon/header.ut
++msgid "Skip to content"
++msgstr "Naar inhoud springen"
+diff --git a/feeds/luci/themes/luci-theme-argon/po/pl/argon-config.po b/feeds/luci/themes/luci-theme-argon/po/pl/argon-config.po
+index f6551c1..e4e3b8b 100644
+--- a/feeds/luci/themes/luci-theme-argon/po/pl/argon-config.po
++++ b/feeds/luci/themes/luci-theme-argon/po/pl/argon-config.po
+@@ -163,7 +163,7 @@ msgid "Grant UCI access for luci-theme-argon"
+ msgstr "Przyznaj dostęp do UCI dla luci-theme-argon"
+ 
+ #: htdocs/luci-static/resources/view/argon-config.js:114
+-msgid "Here you can set the blur and transparency of the login page of argon theme, and manage the background pictures and videos. Chrome is recommended."
++msgid "Here you can set the blur and transparency of the login page of argon theme, and manage the background pictures and videos."
+ msgstr "Tutaj możesz ustawić rozmycie i przezroczystość strony logowania motywu Argon, oraz zarządzać obrazami i filmami tła. Zalecana jest przeglądarka Chrome."
+ 
+ #: htdocs/luci-static/resources/argon/branding.js:60
+@@ -380,3 +380,15 @@ msgstr "[Ciemny motyw] Przezroczystość"
+ #: htdocs/luci-static/resources/view/argon-config.js:47
+ msgid "valid HEX color value"
+ msgstr "prawidłowy kolor w formacie HEX"
++
++#: ucode/template/themes/argon/login_background.ut
++msgid "Play background video"
++msgstr "Odtwórz wideo w tle"
++
++#: ucode/template/themes/argon/login_background.ut
++msgid "Pause background video"
++msgstr "Wstrzymaj wideo w tle"
++
++#: ucode/template/themes/argon/header.ut
++msgid "Skip to content"
++msgstr "Przejdź do treści"
+diff --git a/feeds/luci/themes/luci-theme-argon/po/pt_BR/argon-config.po b/feeds/luci/themes/luci-theme-argon/po/pt_BR/argon-config.po
+index 7c2501a..54651ec 100644
+--- a/feeds/luci/themes/luci-theme-argon/po/pt_BR/argon-config.po
++++ b/feeds/luci/themes/luci-theme-argon/po/pt_BR/argon-config.po
+@@ -165,7 +165,7 @@ msgid "Grant UCI access for luci-theme-argon"
+ msgstr "Permitir acesso à UCI para luci-theme-argon"
+ 
+ #: htdocs/luci-static/resources/view/argon-config.js:114
+-msgid "Here you can set the blur and transparency of the login page of argon theme, and manage the background pictures and videos. Chrome is recommended."
++msgid "Here you can set the blur and transparency of the login page of argon theme, and manage the background pictures and videos."
+ msgstr "Aqui você pode configurar o desfoque e a transparência da página de login do tema Argon e gerenciar as imagens e os vídeos de fundo. Recomenda-se o Chrome."
+ 
+ #: htdocs/luci-static/resources/argon/branding.js:60
+@@ -382,3 +382,15 @@ msgstr "[Modo escuro] Transparência"
+ #: htdocs/luci-static/resources/view/argon-config.js:47
+ msgid "valid HEX color value"
+ msgstr "um valor de cor HEX válido"
++
++#: ucode/template/themes/argon/login_background.ut
++msgid "Play background video"
++msgstr "Reproduzir vídeo de fundo"
++
++#: ucode/template/themes/argon/login_background.ut
++msgid "Pause background video"
++msgstr "Pausar vídeo de fundo"
++
++#: ucode/template/themes/argon/header.ut
++msgid "Skip to content"
++msgstr "Ir para o conteúdo"
+diff --git a/feeds/luci/themes/luci-theme-argon/po/ru/argon-config.po b/feeds/luci/themes/luci-theme-argon/po/ru/argon-config.po
+index d6a2a57..e5902ea 100644
+--- a/feeds/luci/themes/luci-theme-argon/po/ru/argon-config.po
++++ b/feeds/luci/themes/luci-theme-argon/po/ru/argon-config.po
+@@ -163,7 +163,7 @@ msgid "Grant UCI access for luci-theme-argon"
+ msgstr "Разрешить luci-theme-argon доступ к UCI"
+ 
+ #: htdocs/luci-static/resources/view/argon-config.js:114
+-msgid "Here you can set the blur and transparency of the login page of argon theme, and manage the background pictures and videos. Chrome is recommended."
++msgid "Here you can set the blur and transparency of the login page of argon theme, and manage the background pictures and videos."
+ msgstr "Здесь можно настроить размытие и прозрачность страницы логина темы Argon, управлять фоновыми изображениями и видео. Рекомендуется использовать Chrome."
+ 
+ #: htdocs/luci-static/resources/argon/branding.js:60
+@@ -380,3 +380,15 @@ msgstr "[Тёмная тема] Прозрачность"
+ #: htdocs/luci-static/resources/view/argon-config.js:47
+ msgid "valid HEX color value"
+ msgstr "корректное значение HEX-цвета"
++
++#: ucode/template/themes/argon/login_background.ut
++msgid "Play background video"
++msgstr "Воспроизвести фоновое видео"
++
++#: ucode/template/themes/argon/login_background.ut
++msgid "Pause background video"
++msgstr "Приостановить фоновое видео"
++
++#: ucode/template/themes/argon/header.ut
++msgid "Skip to content"
++msgstr "Перейти к содержимому"
+diff --git a/feeds/luci/themes/luci-theme-argon/po/templates/argon-config.pot b/feeds/luci/themes/luci-theme-argon/po/templates/argon-config.pot
+index 1d4d668..8ebb563 100644
+--- a/feeds/luci/themes/luci-theme-argon/po/templates/argon-config.pot
++++ b/feeds/luci/themes/luci-theme-argon/po/templates/argon-config.pot
+@@ -176,7 +176,7 @@ msgstr ""
+ #: htdocs/luci-static/resources/view/argon-config.js:114
+ msgid ""
+ "Here you can set the blur and transparency of the login page of argon theme, "
+-"and manage the background pictures and videos. Chrome is recommended."
++"and manage the background pictures and videos."
+ msgstr ""
+ 
+ #: htdocs/luci-static/resources/argon/branding.js:60
+@@ -407,3 +407,15 @@ msgstr ""
+ #: htdocs/luci-static/resources/view/argon-config.js:47
+ msgid "valid HEX color value"
+ msgstr ""
++
++#: ucode/template/themes/argon/login_background.ut
++msgid "Play background video"
++msgstr ""
++
++#: ucode/template/themes/argon/login_background.ut
++msgid "Pause background video"
++msgstr ""
++
++#: ucode/template/themes/argon/header.ut
++msgid "Skip to content"
++msgstr ""
+diff --git a/feeds/luci/themes/luci-theme-argon/po/tr/argon-config.po b/feeds/luci/themes/luci-theme-argon/po/tr/argon-config.po
+index 7c6d50c..7cb3260 100644
+--- a/feeds/luci/themes/luci-theme-argon/po/tr/argon-config.po
++++ b/feeds/luci/themes/luci-theme-argon/po/tr/argon-config.po
+@@ -163,7 +163,7 @@ msgid "Grant UCI access for luci-theme-argon"
+ msgstr "luci-theme-argon için UCI erişimine izin ver"
+ 
+ #: htdocs/luci-static/resources/view/argon-config.js:114
+-msgid "Here you can set the blur and transparency of the login page of argon theme, and manage the background pictures and videos. Chrome is recommended."
++msgid "Here you can set the blur and transparency of the login page of argon theme, and manage the background pictures and videos."
+ msgstr "Burada Argon temasının giriş sayfasının bulanıklığını ve saydamlığını ayarlayabilir, arka plan resimlerini ve videolarını yönetebilirsiniz. Chrome kullanılması önerilir."
+ 
+ #: htdocs/luci-static/resources/argon/branding.js:60
+@@ -380,3 +380,15 @@ msgstr "[Koyu mod] Saydamlık"
+ #: htdocs/luci-static/resources/view/argon-config.js:47
+ msgid "valid HEX color value"
+ msgstr "geçerli bir HEX renk değeri"
++
++#: ucode/template/themes/argon/login_background.ut
++msgid "Play background video"
++msgstr "Arka plan videosunu oynat"
++
++#: ucode/template/themes/argon/login_background.ut
++msgid "Pause background video"
++msgstr "Arka plan videosunu duraklat"
++
++#: ucode/template/themes/argon/header.ut
++msgid "Skip to content"
++msgstr "İçeriğe atla"
+diff --git a/feeds/luci/themes/luci-theme-argon/po/uk/argon-config.po b/feeds/luci/themes/luci-theme-argon/po/uk/argon-config.po
+index bcda014..893bc68 100644
+--- a/feeds/luci/themes/luci-theme-argon/po/uk/argon-config.po
++++ b/feeds/luci/themes/luci-theme-argon/po/uk/argon-config.po
+@@ -163,7 +163,7 @@ msgid "Grant UCI access for luci-theme-argon"
+ msgstr "Надати luci-theme-argon доступ до UCI"
+ 
+ #: htdocs/luci-static/resources/view/argon-config.js:114
+-msgid "Here you can set the blur and transparency of the login page of argon theme, and manage the background pictures and videos. Chrome is recommended."
++msgid "Here you can set the blur and transparency of the login page of argon theme, and manage the background pictures and videos."
+ msgstr "Тут можна налаштувати розмиття та прозорість сторінки входу теми Argon, а також керувати фоновими зображеннями та відео. Рекомендовано використовувати Chrome."
+ 
+ #: htdocs/luci-static/resources/argon/branding.js:60
+@@ -380,3 +380,15 @@ msgstr "[Темний режим] Прозорість"
+ #: htdocs/luci-static/resources/view/argon-config.js:47
+ msgid "valid HEX color value"
+ msgstr "коректне значення кольору у форматі HEX"
++
++#: ucode/template/themes/argon/login_background.ut
++msgid "Play background video"
++msgstr "Відтворити фонове відео"
++
++#: ucode/template/themes/argon/login_background.ut
++msgid "Pause background video"
++msgstr "Призупинити фонове відео"
++
++#: ucode/template/themes/argon/header.ut
++msgid "Skip to content"
++msgstr "Перейти до вмісту"
+diff --git a/feeds/luci/themes/luci-theme-argon/po/vi/argon-config.po b/feeds/luci/themes/luci-theme-argon/po/vi/argon-config.po
+index f69bf14..6dd31d1 100644
+--- a/feeds/luci/themes/luci-theme-argon/po/vi/argon-config.po
++++ b/feeds/luci/themes/luci-theme-argon/po/vi/argon-config.po
+@@ -163,7 +163,7 @@ msgid "Grant UCI access for luci-theme-argon"
+ msgstr "Cấp quyền truy cập UCI cho luci-theme-argon"
+ 
+ #: htdocs/luci-static/resources/view/argon-config.js:114
+-msgid "Here you can set the blur and transparency of the login page of argon theme, and manage the background pictures and videos. Chrome is recommended."
++msgid "Here you can set the blur and transparency of the login page of argon theme, and manage the background pictures and videos."
+ msgstr "Tại đây, bạn có thể thiết lập độ mờ và độ trong suốt của trang đăng nhập giao diện Argon, đồng thời quản lý hình ảnh và video nền. Khuyến nghị sử dụng Chrome."
+ 
+ #: htdocs/luci-static/resources/argon/branding.js:60
+@@ -380,3 +380,15 @@ msgstr "[Chế độ tối] Độ trong suốt"
+ #: htdocs/luci-static/resources/view/argon-config.js:47
+ msgid "valid HEX color value"
+ msgstr "mã màu HEX hợp lệ"
++
++#: ucode/template/themes/argon/login_background.ut
++msgid "Play background video"
++msgstr "Phát video nền"
++
++#: ucode/template/themes/argon/login_background.ut
++msgid "Pause background video"
++msgstr "Tạm dừng video nền"
++
++#: ucode/template/themes/argon/header.ut
++msgid "Skip to content"
++msgstr "Chuyển đến nội dung"
+diff --git a/feeds/luci/themes/luci-theme-argon/po/zh_Hans/argon-config.po b/feeds/luci/themes/luci-theme-argon/po/zh_Hans/argon-config.po
+index 79ff4fa..f2b1bbe 100644
+--- a/feeds/luci/themes/luci-theme-argon/po/zh_Hans/argon-config.po
++++ b/feeds/luci/themes/luci-theme-argon/po/zh_Hans/argon-config.po
+@@ -181,8 +181,8 @@ msgid "Grant UCI access for luci-theme-argon"
+ msgstr "授予 luci-theme-argon 访问 UCI 配置的权限"
+ 
+ #: htdocs/luci-static/resources/view/argon-config.js:114
+-msgid "Here you can set the blur and transparency of the login page of argon theme, and manage the background pictures and videos. Chrome is recommended."
+-msgstr "设置 Argon 主题登录页的模糊程度和透明度，管理背景图片与视频。建议使用 Chrome 浏览器。"
++msgid "Here you can set the blur and transparency of the login page of argon theme, and manage the background pictures and videos."
++msgstr "设置 Argon 主题登录页的模糊程度和透明度，管理背景图片与视频。"
+ 
+ #: htdocs/luci-static/resources/argon/branding.js:60
+ msgid "Invalid PNG image or dimensions."
+@@ -402,3 +402,15 @@ msgstr "[暗色模式] 透明度"
+ #: htdocs/luci-static/resources/view/argon-config.js:47
+ msgid "valid HEX color value"
+ msgstr "有效的十六进制颜色值"
++
++#: ucode/template/themes/argon/login_background.ut
++msgid "Play background video"
++msgstr "播放背景视频"
++
++#: ucode/template/themes/argon/login_background.ut
++msgid "Pause background video"
++msgstr "暂停背景视频"
++
++#: ucode/template/themes/argon/header.ut
++msgid "Skip to content"
++msgstr "跳至主要内容"
+diff --git a/feeds/luci/themes/luci-theme-argon/po/zh_Hant/argon-config.po b/feeds/luci/themes/luci-theme-argon/po/zh_Hant/argon-config.po
+index 290b808..72d4faf 100644
+--- a/feeds/luci/themes/luci-theme-argon/po/zh_Hant/argon-config.po
++++ b/feeds/luci/themes/luci-theme-argon/po/zh_Hant/argon-config.po
+@@ -165,7 +165,7 @@ msgid "Grant UCI access for luci-theme-argon"
+ msgstr "授予 luci-theme-argon 存取 UCI 設定的權限"
+ 
+ #: htdocs/luci-static/resources/view/argon-config.js:114
+-msgid "Here you can set the blur and transparency of the login page of argon theme, and manage the background pictures and videos. Chrome is recommended."
++msgid "Here you can set the blur and transparency of the login page of argon theme, and manage the background pictures and videos."
+ msgstr "您可以在此設定登入畫面的模糊度、透明度、以及管理背景圖片與影片（推薦使用 Chrome）"
+ 
+ #: htdocs/luci-static/resources/argon/branding.js:60
+@@ -382,3 +382,15 @@ msgstr "[深色模式] 透明度"
+ #: htdocs/luci-static/resources/view/argon-config.js:47
+ msgid "valid HEX color value"
+ msgstr "有效的十六進制顏色值"
++
++#: ucode/template/themes/argon/login_background.ut
++msgid "Play background video"
++msgstr "播放背景影片"
++
++#: ucode/template/themes/argon/login_background.ut
++msgid "Pause background video"
++msgstr "暫停背景影片"
++
++#: ucode/template/themes/argon/header.ut
++msgid "Skip to content"
++msgstr "跳至主要內容"
+diff --git a/feeds/luci/themes/luci-theme-argon/root/usr/share/ucode/luci/argon-palette.uc b/feeds/luci/themes/luci-theme-argon/root/usr/share/ucode/luci/argon-palette.uc
+index dd1785b..62dc00a 100644
+--- a/feeds/luci/themes/luci-theme-argon/root/usr/share/ucode/luci/argon-palette.uc
++++ b/feeds/luci/themes/luci-theme-argon/root/usr/share/ucode/luci/argon-palette.uc
+@@ -23,7 +23,8 @@ import { pow } from 'math';
+ // SOFTWARE.
+ 
+ export function normalize_hex(value) {
+-	if (type(value) != 'string' || !match(value, /^#[0-9a-fA-F]{3}([0-9a-fA-F]{3})?$/))
++	let valid = type(value) == 'string' ? match(value, /^#[0-9a-fA-F]{3}([0-9a-fA-F]{3})?$/) : null;
++	if (!valid || valid[0] != value)
+ 		return null;
+ 	if (length(value) == 4)
+ 		value = '#' + substr(value, 1, 1) + substr(value, 1, 1) +
+diff --git a/feeds/luci/themes/luci-theme-argon/ucode/template/themes/argon/footer.ut b/feeds/luci/themes/luci-theme-argon/ucode/template/themes/argon/footer.ut
+index 58a5bdc..d2413d8 100644
+--- a/feeds/luci/themes/luci-theme-argon/ucode/template/themes/argon/footer.ut
++++ b/feeds/luci/themes/luci-theme-argon/ucode/template/themes/argon/footer.ut
+@@ -32,7 +32,8 @@
+ 				<ul class="breadcrumb pull-right" id="modemenu" style="display:none"></ul>
+ 			</div>
+ 		</footer>
+-	</div>
++	</main>
++</div>
+ </div>
+ {% include('themes/' + theme + '/page_scripts', { is_login: false }) %}
+ </body>
+diff --git a/feeds/luci/themes/luci-theme-argon/ucode/template/themes/argon/footer_login.ut b/feeds/luci/themes/luci-theme-argon/ucode/template/themes/argon/footer_login.ut
+index d2e6142..e213006 100644
+--- a/feeds/luci/themes/luci-theme-argon/ucode/template/themes/argon/footer_login.ut
++++ b/feeds/luci/themes/luci-theme-argon/ucode/template/themes/argon/footer_login.ut
+@@ -28,7 +28,7 @@
+ 	</div>
+ 	<a href="{{ version.disturl }}" target="_blank" title="{{ entityencode(firmware_info, true) }}">{{ firmware_info }}</a>
+ </footer>
+-</div>
++</main>
+ </div>
+ {% include('themes/' + theme + '/page_scripts', { is_login: true }) %}
+ </body>
+diff --git a/feeds/luci/themes/luci-theme-argon/ucode/template/themes/argon/header.ut b/feeds/luci/themes/luci-theme-argon/ucode/template/themes/argon/header.ut
+index 476c7c3..4fdf445 100644
+--- a/feeds/luci/themes/luci-theme-argon/ucode/template/themes/argon/header.ut
++++ b/feeds/luci/themes/luci-theme-argon/ucode/template/themes/argon/header.ut
+@@ -29,6 +29,7 @@
+ 	class="lang_{{ dispatcher.lang }} {{ node?.title ? ` - ${striptags(node.title)}` : '' }} {% if (ctx.authsession): %}logged-in{% endif %}"
+ 	data-page="{{ entityencode(join('-', page_path), true) }}">
+ 
++	<a class="skip-link" href="#maincontent">{{ _('Skip to content') }}</a>
+ 	<div class="main">
+ 		<div class="main-left" id="mainmenu" style="display:none">
+ 			<div class="sidenav-header d-flex align-items-center">
+@@ -62,7 +63,7 @@
+ 				</div>
+ 			</header>
+ 			<div class="darkMask"></div>
+-			<div id="maincontent">
++			<main id="maincontent" tabindex="-1">
+ 				<div class="container">
+ 					{% if (getuid() == 0 && getspnam('root')?.pwdp === ''): %}
+ 					<div class="alert-message error">
+diff --git a/feeds/luci/themes/luci-theme-argon/ucode/template/themes/argon/login_background.ut b/feeds/luci/themes/luci-theme-argon/ucode/template/themes/argon/login_background.ut
+index 16afa19..f5db956 100644
+--- a/feeds/luci/themes/luci-theme-argon/ucode/template/themes/argon/login_background.ut
++++ b/feeds/luci/themes/luci-theme-argon/ucode/template/themes/argon/login_background.ut
+@@ -70,25 +70,50 @@
+ 			<source src="{{ entityencode(bgArry.bgUrl, true) }}" type="{{ bgArry.mimeType }}">
+ 		</video>
+ 	</div>
+-	<button type="button" class="volume-control mute" aria-label="{{ entityencode(_('Mute background video'), true) }}" aria-pressed="true"></button>
++	<div class="background-controls">
++		<button type="button" class="playback-control" aria-controls="video" aria-label="{{ entityencode(_('Play background video'), true) }}" data-play-label="{{ entityencode(_('Play background video'), true) }}" data-pause-label="{{ entityencode(_('Pause background video'), true) }}"></button>
++		<button type="button" class="volume-control mute" aria-controls="video" aria-label="{{ entityencode(_('Mute background video'), true) }}" aria-pressed="true"></button>
++	</div>
+ 	<script>
+ 		var backgroundVideo = document.getElementById("video");
++		var playbackControl = document.querySelector('.playback-control');
+ 		var motionPreference = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)');
++		var playbackChoice = null;
++		function syncBackgroundPlayback() {
++			playbackControl.classList.toggle('playing', !backgroundVideo.paused);
++			playbackControl.setAttribute('aria-label', backgroundVideo.paused
++				? playbackControl.dataset.playLabel : playbackControl.dataset.pauseLabel);
++		}
+ 		function updateBackgroundMotion() {
+-			if (motionPreference && motionPreference.matches)
++			var shouldPlay = playbackChoice === true || (playbackChoice !== false &&
++				!(motionPreference && motionPreference.matches));
++			if (!shouldPlay || document.hidden)
+ 				backgroundVideo.pause();
+ 			else {
+ 				var playResult = backgroundVideo.play();
+ 				if (playResult && playResult.catch)
+-					playResult.catch(function() {});
++					playResult.catch(syncBackgroundPlayback);
+ 			}
++			syncBackgroundPlayback();
+ 		}
++		backgroundVideo.addEventListener('play', syncBackgroundPlayback);
++		backgroundVideo.addEventListener('pause', syncBackgroundPlayback);
++		playbackControl.addEventListener('click', function() {
++			playbackChoice = backgroundVideo.paused;
++			updateBackgroundMotion();
++		});
++		document.addEventListener('visibilitychange', updateBackgroundMotion);
+ 		updateBackgroundMotion();
+ 		if (motionPreference) {
++			var onMotionChange = function() {
++				if (motionPreference.matches && playbackChoice === true)
++					playbackChoice = null;
++				updateBackgroundMotion();
++			};
+ 			if (motionPreference.addEventListener)
+-				motionPreference.addEventListener('change', updateBackgroundMotion);
++				motionPreference.addEventListener('change', onMotionChange);
+ 			else if (motionPreference.addListener)
+-				motionPreference.addListener(updateBackgroundMotion);
++				motionPreference.addListener(onMotionChange);
+ 		}
+ 		document.querySelector(".volume-control").addEventListener("click", function(){
+ 			if(this.classList.contains("mute")){
+diff --git a/feeds/luci/themes/luci-theme-argon/ucode/template/themes/argon/page_scripts.ut b/feeds/luci/themes/luci-theme-argon/ucode/template/themes/argon/page_scripts.ut
+index 0092943..768974f 100644
+--- a/feeds/luci/themes/luci-theme-argon/ucode/template/themes/argon/page_scripts.ut
++++ b/feeds/luci/themes/luci-theme-argon/ucode/template/themes/argon/page_scripts.ut
+@@ -6,6 +6,7 @@
+ {% if (!is_login): %}
+ <script type="text/javascript">L.require('menu-argon')</script>
+ <script type="text/javascript">
++	L.require('argon-compat');
+ 	L.require('argon-appearance');
+ 	if ([ 'admin-status', 'admin-status-overview' ].includes(document.body.dataset.page))
+ 		L.require('argon-overview');
+diff --git a/feeds/luci/themes/luci-theme-argon/ucode/template/themes/argon/sysauth.ut b/feeds/luci/themes/luci-theme-argon/ucode/template/themes/argon/sysauth.ut
+index 9a983cc..14bb547 100644
+--- a/feeds/luci/themes/luci-theme-argon/ucode/template/themes/argon/sysauth.ut
++++ b/feeds/luci/themes/luci-theme-argon/ucode/template/themes/argon/sysauth.ut
+@@ -46,7 +46,7 @@
+ <div class="login-page" data-login-style="{{ login_style }}">
+ 	{% include('themes/' + theme + '/login_background', { cfg: cfg }) %}
+ 	<!-- Login Container Start -->
+-	<div class="login-container">
++	<main class="login-container">
+ 		<div class="login-form">
+ 			<!-- Logo Start -->
+ 			<a class="brand" href="/"><img src="{{ logo_url }}" class="icon" alt="" data-fallback="{{ media }}/img/argon.svg" onerror="this.onerror=null;this.src=this.dataset.fallback">
