@@ -6,8 +6,9 @@ import re
 import sys
 
 lock = json.loads((Path(__file__).resolve().parents[1] / "configs/plugins.lock.json").read_text())
-feed_file = Path(sys.argv[1]) if len(sys.argv) > 1 else Path("feeds.conf.default")
 verify = "--verify" in sys.argv
+positional = [arg for arg in sys.argv[1:] if arg != "--verify"]
+feed_file = Path(positional[0]) if positional else Path("feeds.conf.default")
 text = feed_file.read_text()
 lines = text.splitlines()
 seen = set()

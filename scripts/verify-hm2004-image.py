@@ -41,8 +41,8 @@ def main():
         with image.open("rb") as stream, mmap.mmap(stream.fileno(), 0, access=mmap.ACCESS_READ) as data:
             offset = data.find(b"hsqs")
             require(offset >= 0, "SquashFS found in FIT image")
-            # SquashFS v4 superblock: root_inode is at 40, bytes_used at 48.
-            length = struct.unpack_from("<Q", data, offset + 48)[0]
+            # SquashFS v4 superblock: root_inode is at 32, bytes_used at 40.
+            length = struct.unpack_from("<Q", data, offset + 40)[0]
             require(96 < length <= len(data) - offset, "SquashFS size is within image bounds")
             squashfs.write_bytes(data[offset:offset + length])
         root = tmp / "root"

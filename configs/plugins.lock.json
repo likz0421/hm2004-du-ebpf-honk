@@ -144,7 +144,16 @@
       "rtp2httpd": "3.17.2-r1",
       "v2ray-geosite": "20261115151618-r1",
       "v2ray-geoip": "202611080027-r1",
-      "luci-app-ota": "1.0.2-r1"
+      "luci-app-ota": "1.0.2-r1",
+      "luci-app-airoha-npu": "1.2.1-r1",
+      "luci-app-natmode": "0.1.6-r1",
+      "luci-app-pon-status": "0.4.6-r4",
+      "luci-app-igmpproxy": "2.0-r1",
+      "luci-app-pon": "0.1.0-r3",
+      "luci-app-iptv": "0.1.0-r1",
+      "igmpproxy": "0.4-r1",
+      "ttyd": "1.7.7-r1",
+      "luci-app-ttyd": "26.315.10273~ad75cde"
     }
   }
 }
