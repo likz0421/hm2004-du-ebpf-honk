@@ -31,7 +31,7 @@ def argon(ow):
     if baseline != "9e656c9ca28d1dd4845d8c13ac30fc6f3948bd0b":
         raise ValueError("Argon feed base changed; rebase audited official 3.1.4 delta first")
     patch = REPO / "patches/plugins/argon-3.1.4.patch"
-    if hashlib.sha256(patch.read_bytes()).hexdigest() != "eec8e69b5bf40a370f095e671a5f21fc2e5cf77dabc2c531ac7f33998f05987e":
+    if hashlib.sha256(patch.read_bytes()).hexdigest() != "779788de9cc5fff59367e561f6ec15d83f4641ce088a7428dbb904ef282d1de0":
         raise ValueError("Argon compatibility patch hash mismatch")
     subprocess.run(["git", "apply", "--check", str(patch)], cwd=ow, check=True)
     subprocess.run(["git", "apply", str(patch)], cwd=ow, check=True)
