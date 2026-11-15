@@ -6,7 +6,7 @@ import subprocess
 import sys
 
 root = Path(sys.argv[1]).resolve()
-p = subprocess.run(["rg", "--files", "--hidden", "-L", "-g", "Makefile", "-g", "*.mk", "-g", "!.git/**", "package", "feeds"], cwd=root, capture_output=True, text=True, check=True)
+p = subprocess.run(["rg", "--files", "--hidden", "-g", "Makefile", "-g", "*.mk", "-g", "!.git/**", "package", "feeds"], cwd=root, capture_output=True, text=True, check=True)
 seen = set()
 changed = 0
 for name in p.stdout.splitlines():

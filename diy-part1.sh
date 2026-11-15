@@ -76,11 +76,15 @@ clone() {  # clone <url> <dir> [branch]
   fi
   log="$(mktemp)"
   echo "--- git clone $url -> $dir ---"
-  if { [ -n "$br" ] && git clone --depth 1 -b "$br" "$url" "$dir" >"$log" 2>&1; } || \
-     { [ -z "$br" ] && git clone --depth 1 "$url" "$dir" >"$log" 2>&1; }; then
-    tail -3 "$log"
+  if [ -n "$br" ]; then
+    git clone --depth 1 -b "$br" "$url" "$dir" >"$log" 2>&1
+  else
+    git clone --depth 1 "$url" "$dir" >"$log" 2>&1
+  fi
+  rc=$?
+  tail -3 "$log"
+  if [ "$rc" -eq 0 ] && git -C "$dir" rev-parse --verify HEAD >/dev/null 2>&1; then
     rm -f "$log"
-    git -C "$dir" rev-parse --verify HEAD >/dev/null || return 1
     echo "✅ 克隆成功: $dir"
     return 0
   fi

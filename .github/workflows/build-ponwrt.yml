@@ -41,6 +41,7 @@ env:
   FTTR_LUCI_REPO: ${{ github.event.inputs.fttr_luci_repo || 'LazuliKao/luci-app-fttr' }}
   FTTR_LUCI_BRANCH: ${{ github.event.inputs.fttr_luci_branch || 'main' }}
 
+
 on:
   # push v* tag 即自动构建并发版（每次 tag 一个独立 Release）
   push:
@@ -680,15 +681,15 @@ jobs:
           if [ -n "${FEEDS_CONF}" ] && [ -e "$GITHUB_WORKSPACE/${FEEDS_CONF}" ]; then
             cp "$GITHUB_WORKSPACE/${FEEDS_CONF}" feeds.conf.default
           fi
-          bash "$GITHUB_WORKSPACE/scripts/honk-feeds.sh"
-          if [ "${PROFILE}" = "h3c_hm2004-du" ]; then
+          if [[ "${PROFILE}" == h3c_hm2004-du ]]; then
+            bash "$GITHUB_WORKSPACE/scripts/honk-feeds.sh"
             python3 "$GITHUB_WORKSPACE/scripts/pin-feeds.py" feeds.conf.default
           fi
           ./scripts/feeds update -a
           ./scripts/feeds install -a
-          # honk feed pin 已在 feeds.conf.default；feed update/install 完成后安装两个 honk 包。
-          ./scripts/feeds install -p honk honk luci-app-honk
-          if [ "${PROFILE}" = "h3c_hm2004-du" ]; then
+          # honk feed 只用于 HM2004-DU，feed pin 已在 update 前注入。
+          if [[ "${PROFILE}" == h3c_hm2004-du ]]; then
+            ./scripts/feeds install -p honk honk luci-app-honk
             python3 "$GITHUB_WORKSPACE/scripts/pin-feeds.py" --verify feeds.conf.default
           fi
 
@@ -731,7 +732,7 @@ jobs:
           [ -d files/sbin ] && chmod +x files/sbin/* 2>/dev/null
           [ -d files/etc/uci-defaults ] && chmod +x files/etc/uci-defaults/* 2>/dev/null
 
-          if [ "${PROFILE}" = "h3c_hm2004-du" ]; then
+          if [[ "${PROFILE}" == h3c_hm2004-du ]]; then
             python3 "$GITHUB_WORKSPACE/scripts/plugin-lock.py" manifest "$PWD"
             install -D -m 0644 files/etc/firmware-plugins.json "$GITHUB_WORKSPACE/build-provenance.json"
           fi
@@ -882,7 +883,7 @@ jobs:
 
           # 选择缺失即失败；不再改写上游 Makefile 或补造被误判的 feature。
           # strings 的 device-* 是 serde 字段名，真实 adapter 要运行 --capabilities。
-          if [ "${PROFILE}" = "h3c_hm2004-du" ]; then
+          if [[ "${PROFILE}" == h3c_hm2004-du ]]; then
             python3 "$GITHUB_WORKSPACE/scripts/verify-plugin-config.py" "$PWD"
           fi
 
@@ -1341,7 +1342,7 @@ jobs:
         if: env.BUILD_SCOPE != 'toolchain-only'
         run: |
           cd "$BUILD_ROOT/openwrt"
-          if [ "${PROFILE}" = "h3c_hm2004-du" ]; then
+          if [[ "${PROFILE}" == h3c_hm2004-du ]]; then
             python3 "$GITHUB_WORKSPACE/scripts/plugin-lock.py" manifest "$PWD" --output "$GITHUB_WORKSPACE/build-provenance.json"
           fi
           # 可用内存(MiB) / 2GiB 每 job，下限 1、上限 nproc
