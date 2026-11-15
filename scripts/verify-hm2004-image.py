@@ -35,6 +35,7 @@ def main():
         if name == "honk-core":
             continue  # Core binary is statically sourced; manifest reports only the package wrapper.
         require(installed.get(name) == version, f"{name} = {version}; actual {installed.get(name)}")
+    require(installed.get("honk") == lock["expected"]["packages"]["honk"], "Honk package wrapper version matches the audited feed")
     with tempfile.TemporaryDirectory(prefix="verify-hm2004-") as temp:
         tmp = Path(temp)
         squashfs = tmp / "root.squashfs"
@@ -73,8 +74,9 @@ def main():
         honk = (root / "etc/config/honk").read_text()
         require(re.search(r"option\s+enabled\s+['\"]0['\"]", honk) is not None, "honk defaults disabled")
         lan = (root / "etc/uci-defaults/93-lan-dhcp").read_text()
-        for expected in ["network.lan.ipaddr='10.1.1.1'", "dhcp.lan.start='2'", "dhcp.@dnsmasq[0].sequential_ip='1'"]:
+        for expected in ["network.lan.ipaddr='10.1.1.1'", "dhcp.lan.start='2'"]:
             require(expected in lan, expected)
+        require("dhcp.@dnsmasq[0].sequential_ip='1'" in lan, "dnsmasq sequential IP allocation enabled")
         wifi = (root / "etc/uci-defaults/95-wifi-hanzi").read_text()
         require("SSID='hanzi'" in wifi and "KEY='hanziwawa'" in wifi, "both WiFi bands retain user defaults")
         rtp_init = (root / "etc/init.d/rtp2httpd").read_text()
