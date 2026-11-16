@@ -41,8 +41,8 @@ jobs:
           git -C pon-drivers checkout --detach "${pins[8]}"
           mkdir -p openwrt/package/custom
           cp -a fttr/h3c-fmcs fttr/h3c-fmcs-firmware openwrt/package/custom/
-          cp -a pon-drivers openwrt/package/custom/pon-drivers
-          rm -rf openwrt/package/custom/pon-drivers/.git
+          cp -a pon-drivers/airoha-pon-frontends pon-drivers/airoha-xpon openwrt/package/custom/
+          rm -rf openwrt/package/custom/airoha-pon-frontends/.git openwrt/package/custom/airoha-xpon/.git
       - name: Configure HM2004 only
         working-directory: openwrt
         run: |
@@ -77,8 +77,8 @@ jobs:
         run: |
           set -o pipefail
           make package/kernel/linux/compile V=s -j$(nproc) 2>&1 | tee ../kernel-kmod-compile.log
-          make package/custom/pon-drivers/airoha-pon-frontends/compile V=s -j$(nproc) 2>&1 | tee ../pon-frontend-compile.log
-          make package/custom/pon-drivers/airoha-xpon/compile V=s -j$(nproc) 2>&1 | tee ../pon-driver-compile.log
+          make package/custom/airoha-pon-frontends/compile V=s -j$(nproc) 2>&1 | tee ../pon-frontend-compile.log
+          make package/custom/airoha-xpon/compile V=s -j$(nproc) 2>&1 | tee ../pon-driver-compile.log
           make package/custom/h3c-fmcs/compile V=s -j$(nproc) 2>&1 | tee ../fmcs-driver-compile.log
       - name: Verify PON and FTTR packages built
         working-directory: openwrt
