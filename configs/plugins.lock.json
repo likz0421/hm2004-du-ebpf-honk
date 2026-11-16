@@ -1,6 +1,12 @@
 {
   "schema_version": 1,
   "checked_at": "2026-11-16",
+  "build_base": {
+    "url": "https://github.com/pbs05/ponwrt",
+    "branch": "master",
+    "commit": "f6977f2947eb355b106470354feae3d14868fbdd",
+    "previous_commit": "d9dd3a49f7bb7661c01e9c57c9e2aac2a1114b3e"
+  },
   "sources": {
     "fttr-backend": {
       "repo": "LazuliKao/openwrt-fttr",
@@ -81,12 +87,12 @@
     "pon_drivers": {
       "branch": "main",
       "url": "https://github.com/pbs05/openwrt-pon-drivers.git",
-      "commit": "2789b970a6bfcc5ee56cee699622201b8061b67c"
+      "commit": "47ad31349807099cf84c8ca9fb1a3f10120ef9ee"
     },
     "pon_userspace": {
       "branch": "main",
       "url": "https://github.com/pbs05/openwrt-pon-userspace.git",
-      "commit": "cce9d756742487b378749c606b30e13ee9b0f093"
+      "commit": "a903fcc80f4b89f9b9e59a02d3ba1fc5550819a5"
     },
     "honk": {
       "branch": "main",
@@ -143,6 +149,10 @@
       "v2ray-geosite": "20261115151618-r1",
       "v2ray-geoip": "202611080027-r1",
       "luci-app-ota": "1.0.2-r1",
+      "airoha-ponctl": "0.2.0-r1",
+      "airoha-pond": "0.3.0-r3",
+      "kmod-airoha-xpon": "6.18.60-r70",
+      "kmod-airoha-pon-frontend": "6.18.60-r13",
       "luci-app-airoha-npu": "1.2.1-r1",
       "luci-app-natmode": "0.1.6-r1",
       "luci-app-pon-status": "0.4.6-r4",

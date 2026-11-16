@@ -76,9 +76,11 @@ def main():
         provenance = root / "etc/firmware-plugins.json"
         require(provenance.is_file(), "plugin provenance is embedded in the image")
         embedded = json.loads(provenance.read_text())
-        for field in ("sources", "feeds", "archives", "expected"):
+        for field in ("build_base", "sources", "feeds", "archives", "expected"):
             require(embedded.get(field) == lock.get(field), f"embedded {field} matches audited lock")
-        require(bool(embedded.get("build_source")) and bool(embedded.get("build_repo")), "build commit identities recorded")
+        require(embedded.get("build_source") == lock["build_base"]["commit"], "firmware uses the audited pbs05 base commit")
+        require(embedded.get("feed_commits") == {name: spec["commit"] for name, spec in lock["feeds"].items()}, "actual checked-out feed commits match locks")
+        require(bool(embedded.get("build_repo")), "build repository commit recorded")
         qemu = shutil.which("qemu-aarch64-static") or shutil.which("qemu-aarch64")
         require(bool(qemu), "aarch64 user emulator available")
         def target(path, *params):

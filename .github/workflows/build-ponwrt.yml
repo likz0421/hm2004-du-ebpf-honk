@@ -313,6 +313,9 @@ jobs:
           cd "$BUILD_ROOT"
           df -hT "$PWD"
           git clone "$REPO_URL" -b "$REPO_BRANCH" --single-branch --depth=1 openwrt
+          if [ "${PROFILE}" = "h3c_hm2004-du" ]; then
+            python3 "$GITHUB_WORKSPACE/scripts/plugin-lock.py" checkout-base "$BUILD_ROOT/openwrt"
+          fi
           ln -sf "$BUILD_ROOT/openwrt" "$GITHUB_WORKSPACE/openwrt"
 
           # 输入项为空时回退到 workflow 级默认值，确保 diy-part2.sh 拿到的

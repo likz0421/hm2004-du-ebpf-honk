@@ -14,7 +14,11 @@ required += ["CONFIG_FTTR_" + part for part in ["PLATFORM_H3C_HM2004_DU", "DEVIC
 missing = [key for key in required if config.get(key) != "y"]
 if missing:
     raise SystemExit("Missing required plugin settings after defconfig: " + ", ".join(missing))
-print("Required HM2004 plugins, BTF and all upstream FTTR features selected")
+devices = {key for key, value in config.items()
+           if key.startswith("CONFIG_TARGET_DEVICE_airoha_") and value == "y"}
+if devices != {"CONFIG_TARGET_DEVICE_airoha_an7581_DEVICE_h3c_hm2004-du"}:
+    raise SystemExit("Unexpected selected device profiles: " + ", ".join(sorted(devices)))
+print("Only HM2004-DU is selected; all required PON/FTTR plugins present")
 for key in required:
     if key.startswith("CONFIG_FTTR_"):
         print(key + "=" + config[key])

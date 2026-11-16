@@ -33,10 +33,31 @@ def checkout(name, directory):
             raise ValueError("FTTR package does not originate from the audited frontend source")
     print(f"Pinned {name}: {actual}", flush=True)
 
+def checkout_base(directory):
+    spec = lock_data()["build_base"]
+    directory = Path(directory)
+    remote = git(directory, "remote", "get-url", "origin").removesuffix(".git")
+    if remote != spec["url"].removesuffix(".git"):
+        raise ValueError("HM2004 source repository differs from the audited pbs05 base")
+    subprocess.run(["git", "-C", str(directory), "fetch", "--depth", "1", "origin", spec["commit"]], check=True)
+    subprocess.run(["git", "-C", str(directory), "checkout", "--detach", spec["commit"]], check=True)
+    if git(directory, "rev-parse", "HEAD") != spec["commit"]:
+        raise ValueError("Failed to select the audited PonWrt base")
+    print(f"Pinned PonWrt base: {spec['commit']}", flush=True)
+
+
 def manifest_data(openwrt):
     data = lock_data()
     data["build_source"] = git(openwrt, "rev-parse", "HEAD")
     data["build_repo"] = git(REPO_ROOT, "rev-parse", "HEAD")
+    if data["build_source"] != data["build_base"]["commit"]:
+        raise ValueError("Build source commit differs from the audited base")
+    data["feed_commits"] = {}
+    for name, spec in data["feeds"].items():
+        actual = git(Path(openwrt) / "feeds" / name, "rev-parse", "HEAD")
+        if actual != spec["commit"]:
+            raise ValueError(f"Feed {name} checkout differs from its lock: {actual}")
+        data["feed_commits"][name] = actual
     return data
 
 
@@ -61,6 +82,8 @@ def main():
     q = sub.add_parser("checkout")
     q.add_argument("name")
     q.add_argument("directory")
+    q = sub.add_parser("checkout-base")
+    q.add_argument("directory")
     q = sub.add_parser("manifest")
     q.add_argument("openwrt")
     q.add_argument("--output", type=Path)
@@ -72,6 +95,8 @@ def main():
         print(value if isinstance(value, (str, int)) else json.dumps(value))
     elif args.command == "checkout":
         checkout(args.name, args.directory)
+    elif args.command == "checkout-base":
+        checkout_base(args.directory)
     else:
         write_manifest(args.openwrt, args.output)
 
