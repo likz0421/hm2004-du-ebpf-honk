@@ -1,0 +1,10 @@
+{
+  "repository": "naoki66/OpenWrt_ONU_CONFIG",
+  "commit": "3cb13560459f1d51136dac662baa1f399028b2b4",
+  "original_files_sha256": {
+    "htdocs/luci-static/resources/view/onu/status.js": "e244555acd6600989595b43495499c178bbe58ebc4f9afdff2cb2780f5f1e5a3",
+    "htdocs/luci-static/resources/view/onu/onu.css": "d4f2737076b734d1244fa4a122cfc4fd1d76bda87cbe66a7d8312e0b9aa6ec79",
+    "po/zh_Hans/onu.po": "708efc817d04248bf8fabe94f57c4cc6e6e6e11ddf2349585b6536d45661e459"
+  },
+  "scope": "Frontend-only port; runtime data uses pbs05 and existing qwe read-only interfaces"
+}
