@@ -15,6 +15,6 @@
   "pon_drivers": {
     "url": "https://github.com/likz0421/openwrt-pon-drivers.git",
     "branch": "main",
-    "commit": "8ba887c3890b0ba22ace20bb1ee718020ee4931a"
+    "commit": "d1a4e307c3c528eb8cd91d86090dfaf8c2d6b66a"
   }
 }

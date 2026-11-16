@@ -51,7 +51,7 @@ jobs:
           python3 - <<'PY'
           from pathlib import Path
           s=Path('.config').read_text()
-          required=['TARGET_airoha','TARGET_airoha_an7581','TARGET_DEVICE_airoha_an7581_DEVICE_h3c_hm2004-du']
+          required=['TARGET_airoha','TARGET_airoha_an7581','TARGET_DEVICE_airoha_an7581_DEVICE_h3c_hm2004-du','PACKAGE_kmod-h3c-fmcs','PACKAGE_h3c-fmcs-firmware','PACKAGE_kmod-airoha-xpon','PACKAGE_kmod-airoha-pon-frontend','PACKAGE_kmod-airoha-en7572','PACKAGE_kmod-i2c-core']
           missing=[x for x in required if 'CONFIG_'+x+'=y\n' not in s]
           if missing: raise SystemExit('Missing configuration: '+', '.join(missing))
           if 'KERNEL_PATCHVER:=6.12' not in Path('target/linux/airoha/Makefile').read_text(): raise SystemExit('Stable kernel changed')
@@ -79,6 +79,7 @@ jobs:
           make package/kernel/linux/compile V=s -j$(nproc) 2>&1 | tee ../kernel-kmod-compile.log
           make package/custom/airoha-pon-frontends/compile V=s -j$(nproc) 2>&1 | tee ../pon-frontend-compile.log
           make package/custom/airoha-xpon/compile V=s -j$(nproc) 2>&1 | tee ../pon-driver-compile.log
+          make package/custom/h3c-fmcs-firmware/compile V=s -j$(nproc) 2>&1 | tee ../fmcs-firmware-compile.log
           make package/custom/h3c-fmcs/compile V=s -j$(nproc) 2>&1 | tee ../fmcs-driver-compile.log
       - name: Verify PON and FTTR packages built
         working-directory: openwrt
@@ -86,11 +87,13 @@ jobs:
           set -euo pipefail
           python3 - <<'PY'
           from pathlib import Path
-          b=Path('bin/targets/airoha/an7581/packages')
-          wanted=['kmod-airoha-pon-frontend','kmod-airoha-en7572','kmod-airoha-xpon','kmod-h3c-fmcs','h3c-fmcs-firmware']
-          found=[x for x in wanted if list(b.glob(x+'-*'))]
-          missing=[x for x in wanted if x not in found]
-          print('Built packages:', ', '.join(found) if found else 'NONE')
+          # kmods and firmware can use different package output directories.
+          packages=[p for p in Path('bin').rglob('*') if p.is_file() and p.suffix in {'.ipk','.apk'} and p.stat().st_size > 0]
+          wanted=['kmod-i2c-core','kmod-airoha-pon-frontend','kmod-airoha-en7572','kmod-airoha-xpon','kmod-h3c-fmcs','h3c-fmcs-firmware']
+          found={name:[str(p) for p in packages if p.match(name+'_*.ipk') or p.match(name+'-[0-9]*.apk')] for name in wanted}
+          for name, paths in found.items():
+            print(name+': '+(', '.join(sorted(paths)) if paths else 'MISSING'))
+          missing=[name for name, paths in found.items() if not paths]
           if missing: raise SystemExit('Missing built packages: '+', '.join(missing))
           PY
       - name: Upload diagnostic evidence
