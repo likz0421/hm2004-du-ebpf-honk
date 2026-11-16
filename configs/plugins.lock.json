@@ -6,8 +6,7 @@
       "repo": "LazuliKao/openwrt-fttr",
       "branch": "main",
       "commit": "cbcf1308f45259100391accc9ede7ac3e545676c",
-      "previous_commit": "fb3128263663ceb8ac978c7cb0eec0be7963e953",
-      "today_commit": "0d46dd9bd195f98e4b8941a2a8b5841d5d7e0ab7"
+      "previous_commit": "fb3128263663ceb8ac978c7cb0eec0be7963e953"
     },
     "fttr-frontend": {
       "repo": "LazuliKao/luci-app-fttr",
@@ -16,7 +15,6 @@
       "source_commit": "385492a8c5f530847dde3948f21bf3860bccf84b",
       "version": "2026.11.15.105855",
       "previous_commit": "466a869d29fcadef165f4c78d69dcea4749eef52",
-      "today_commit": "a608264943b5e0f49298a3ff071d22e330c5ad9e",
       "previous_version": "2026.11.14.162613"
     },
     "honk-feed": {

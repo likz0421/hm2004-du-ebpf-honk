@@ -18,6 +18,24 @@ def require(ok, message):
     print("PASS", message, flush=True)
 
 
+def verify_argon_templates(root, qemu, temporary):
+    template_dir = root / "usr/share/ucode/luci/template/themes/argon"
+    templates = sorted(template_dir.glob("*.ut"))
+    expected = {"footer.ut", "footer_login.ut", "head.ut", "head_meta.ut", "header.ut",
+                "header_login.ut", "login_background.ut", "login_form.ut", "out_header_login.ut",
+                "page_scripts.ut", "sysauth.ut"}
+    require({file.name for file in templates} == expected, "all 11 pinned Argon ucode templates installed")
+    require(all(file.stat().st_size > 0 for file in templates), "Argon templates are non-empty source files")
+    for file in templates:
+        command = [qemu, "-L", str(root), str(root / "usr/bin/ucode"), "-T", "-c",
+                   "-o", str(temporary / "template.ucb"), str(file)]
+        result = subprocess.run(command, text=True, capture_output=True, timeout=20)
+        if result.returncode:
+            raise ValueError(f"Argon template compile failed: {file.name}\n{result.stderr}\n{result.stdout}")
+    require(True, f"target ucode compiles {len(templates)} Argon templates in -T template mode")
+    return {"count": len(templates), "compiler_mode": "-T -c", "passed": True}
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("openwrt", type=Path)
@@ -55,10 +73,12 @@ def main():
         print(release, flush=True)
         desc = re.search(r"^DISTRIB_DESCRIPTION='(.*)'$", release, re.M)
         require(desc is not None and args.tag in desc.group(1), "firmware description contains exact release tag")
-        embedded = lock
         provenance = root / "etc/firmware-plugins.json"
-        provenance.write_text(json.dumps(embedded, ensure_ascii=False, indent=2) + "\n")
-        # The same provenance record is emitted next to release assets below.
+        require(provenance.is_file(), "plugin provenance is embedded in the image")
+        embedded = json.loads(provenance.read_text())
+        for field in ("sources", "feeds", "archives", "expected"):
+            require(embedded.get(field) == lock.get(field), f"embedded {field} matches audited lock")
+        require(bool(embedded.get("build_source")) and bool(embedded.get("build_repo")), "build commit identities recorded")
         qemu = shutil.which("qemu-aarch64-static") or shutil.which("qemu-aarch64")
         require(bool(qemu), "aarch64 user emulator available")
         def target(path, *params):
@@ -88,11 +108,9 @@ def main():
         if not theme.is_file():
             theme = root / "www/luci-static/resources/argon/argon-compat.js"
         require(theme.is_file(), "Argon 3.1.4 browser compatibility module installed")
-        template_dir = root / "usr/share/ucode/template/themes/argon"
-        templates = list(template_dir.glob("*.ut"))
-        require(bool(templates), "Argon ucode templates installed")
-        require(all(file.stat().st_size > 0 for file in templates), f"{len(templates)} non-empty Argon ucode templates installed")
-        (image.parent / "plugin-verification.json").write_text(json.dumps({"tag":args.tag,"passed":True,"packages":lock["expected"]["packages"],"fttr_capabilities":caps,"sources":lock["sources"]}, ensure_ascii=False, indent=2) + "\n")
+        template_result = verify_argon_templates(root, qemu, tmp)
+        (image.parent / "plugin-sources.json").write_text(json.dumps(embedded, ensure_ascii=False, indent=2) + "\n")
+        (image.parent / "plugin-verification.json").write_text(json.dumps({"tag":args.tag,"passed":True,"packages":lock["expected"]["packages"],"fttr_capabilities":caps,"sources":lock["sources"],"argon_templates":template_result}, ensure_ascii=False, indent=2) + "\n")
     print("All HM2004 image checks passed; target-device IPTV/WiFi traffic remains an on-device test.")
 
 

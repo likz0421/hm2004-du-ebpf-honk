@@ -1371,6 +1371,7 @@ jobs:
           bash "$GITHUB_WORKSPACE/scripts/pwrt-cache.sh" freeze "$CACHE_ROOT" || true
 
       - name: Verify HM2004 plugin image
+        id: verify_image
         if: steps.compile.outputs.status == 'success' && env.PROFILE == 'h3c_hm2004-du'
         run: |
           python3 "$GITHUB_WORKSPACE/scripts/verify-hm2004-image.py" "$BUILD_ROOT/openwrt" --tag "$GITHUB_REF_NAME"
@@ -1475,7 +1476,7 @@ jobs:
       # =========================================================
       - name: Upload bin directory
         uses: actions/upload-artifact@v5
-        if: steps.compile.outputs.status == 'success' && env.UPLOAD_BIN_DIR == 'true'
+        if: success() && steps.compile.outputs.status == 'success' && env.UPLOAD_BIN_DIR == 'true' && (env.PROFILE != 'h3c_hm2004-du' || steps.verify_image.outcome == 'success')
         with:
           name: OpenWrt_bin_${{ env.DEVICE_NAME }}${{ env.FILE_DATE }}
           # 必须用绝对路径：openwrt/bin 是 $GITHUB_WORKSPACE 下的符号链接
@@ -1488,7 +1489,7 @@ jobs:
       # =========================================================
       - name: Organize files
         id: organize
-        if: env.UPLOAD_FIRMWARE == 'true' && steps.compile.outputs.status == 'success'
+        if: success() && env.UPLOAD_FIRMWARE == 'true' && steps.compile.outputs.status == 'success' && (env.PROFILE != 'h3c_hm2004-du' || steps.verify_image.outcome == 'success')
         run: |
           cd "$BUILD_ROOT"/openwrt/bin/targets/*/*
           rm -rf packages
@@ -1507,7 +1508,7 @@ jobs:
       # =========================================================
       - name: Generate release tag
         id: tag
-        if: env.UPLOAD_RELEASE == 'true' && steps.compile.outputs.status == 'success'
+        if: success() && env.UPLOAD_RELEASE == 'true' && steps.compile.outputs.status == 'success' && (env.PROFILE != 'h3c_hm2004-du' || steps.verify_image.outcome == 'success')
         run: |
           # 没产出固件就别发空 Release
           if [ -z "$FIRMWARE" ] || [ -z "$(ls -A "$FIRMWARE" 2>/dev/null)" ]; then
@@ -1584,7 +1585,7 @@ jobs:
       #     仅清理「已上传成功」的运行；失败的运行保留日志便于排错。
       # =========================================================
       - name: Delete workflow runs
-        if: steps.compile.outputs.status == 'success'
+        if: success() && steps.tag.outputs.status == 'success'
         uses: Mattraks/delete-workflow-runs@v2
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
@@ -1593,7 +1594,7 @@ jobs:
 
       - name: Remove old releases
         uses: dev-drprasad/delete-older-releases@v0.3.4
-        if: env.UPLOAD_RELEASE == 'true' && !cancelled()
+        if: success() && env.UPLOAD_RELEASE == 'true' && steps.tag.outputs.status == 'success'
         with:
           keep_latest: 10
           delete_tags: true
