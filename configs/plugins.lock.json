@@ -1,25 +1,32 @@
 {
   "schema_version": 1,
-  "checked_at": "2026-11-16",
+  "checked_at": "2026-11-17",
   "build_base": {
-    "url": "https://github.com/pbs05/ponwrt",
-    "branch": "master",
-    "commit": "f6977f2947eb355b106470354feae3d14868fbdd",
-    "previous_commit": "d9dd3a49f7bb7661c01e9c57c9e2aac2a1114b3e"
+    "url": "https://github.com/likz0421/hm2004-openwrt-stable",
+    "branch": "hm2004-openwrt-25.12",
+    "commit": "7fd46d7a6abbb84f9b8d566c13d597a3791112ae",
+    "official_url": "https://github.com/openwrt/openwrt",
+    "official_branch": "openwrt-25.12",
+    "official_commit": "60c494ad065fe3fcaeadf0e9ff4a8a2dc6e6be43",
+    "stable_release": "25.12.6",
+    "kernel": "6.12.116",
+    "hardware_source": "pbs05/ponwrt",
+    "hardware_commit": "f6977f2947eb355b106470354feae3d14868fbdd"
   },
   "sources": {
     "fttr-backend": {
-      "repo": "LazuliKao/openwrt-fttr",
-      "branch": "main",
-      "commit": "cbcf1308f45259100391accc9ede7ac3e545676c",
-      "previous_commit": "fb3128263663ceb8ac978c7cb0eec0be7963e953"
+      "repo": "likz0421/openwrt-fttr",
+      "branch": "hm2004-fttr-improvements",
+      "commit": "f9974706352022f2efcee6ab20b5ef2be7ece8ab",
+      "previous_commit": "fb3128263663ceb8ac978c7cb0eec0be7963e953",
+      "upstream_commit": "cbcf1308f45259100391accc9ede7ac3e545676c"
     },
     "fttr-frontend": {
-      "repo": "LazuliKao/luci-app-fttr",
+      "repo": "likz0421/luci-app-fttr",
       "branch": "package",
-      "commit": "e1a21e6e0d95fd3c6f39445b16d9e197b97f361d",
-      "source_commit": "385492a8c5f530847dde3948f21bf3860bccf84b",
-      "version": "2026.11.15.105855",
+      "commit": "599b815ed2e214fded5540eca0441bd6b6281772",
+      "source_commit": "552266bdbde0645c50b8b6d949a5f9d27361ad68",
+      "version": "2026.11.17.1",
       "previous_commit": "466a869d29fcadef165f4c78d69dcea4749eef52",
       "previous_version": "2026.11.14.162613"
     },
@@ -60,29 +67,24 @@
   },
   "feeds": {
     "packages": {
-      "branch": "master",
+      "branch": "openwrt-25.12",
       "url": "https://github.com/immortalwrt/packages.git",
-      "commit": "decf94639ffd6ddd26591c190b547c6b7eea150b"
+      "commit": "fa25995d74a720c1c98bf6265d3dd8b4eb620d1f"
     },
     "luci": {
-      "branch": "master",
+      "branch": "openwrt-25.12",
       "url": "https://github.com/immortalwrt/luci.git",
-      "commit": "ad75cde88e694b511100576bfbe0a280e5efe6ef"
+      "commit": "8f18275bb510818c501e4b124f872b6d30573d8a"
     },
     "routing": {
-      "branch": "master",
+      "branch": "openwrt-25.12",
       "url": "https://github.com/openwrt/routing.git",
-      "commit": "ea8633da9c461a9bdc62a0323439d31180762e03"
+      "commit": "625f9d8446807708bab4eef26cdc44692164818a"
     },
     "telephony": {
-      "branch": "master",
+      "branch": "openwrt-25.12",
       "url": "https://github.com/openwrt/telephony.git",
-      "commit": "06feffc2c154993f555b43756ef7db6dd7e58225"
-    },
-    "video": {
-      "branch": "master",
-      "url": "https://github.com/openwrt/video.git",
-      "commit": "97137d9e4bbf2d5b8fc74b49d2a8641f21855032"
+      "commit": "c58ec5a6703966dcccb53d0919698c8aba3a9ef5"
     },
     "pon_drivers": {
       "branch": "main",
@@ -116,7 +118,16 @@
     "geosite": {
       "version": "20261115151618",
       "url": "https://github.com/v2fly/domain-list-community/releases/download/20261115151618/dlc.dat",
-      "sha256": "94ad31b62a6e977599a5ac7489e94f8e1fe2c4a2b679336ca954b33bdf6aadf4"
+      "sha256": "94ad31b62a6e977599a5ac7489e94f8e1fe2c4a2b679336ca954b33bdf6aadf4",
+      "recipe_base_version": "20261009101206",
+      "recipe_base_sha256": "51fcbfa2bf420e678a4c1f764ad8b2e668f99ac95fae147bb7aea7f75f96a641"
+    },
+    "geoip": {
+      "version": "202611080027",
+      "url": "https://github.com/v2fly/geoip/releases/download/202611080027/geoip.dat",
+      "sha256": "eedb24b3b9fcba27e06b92c0428dab90d9496083091ae4cf39e11387fd99d0e2",
+      "recipe_base_version": "202610050438",
+      "recipe_base_sha256": "4ff4b2ec242a9e87b296ba27ddb85f8311e8d3e071eaebac5be9231c60e408dd"
     }
   },
   "expected": {
@@ -139,8 +150,8 @@
     ],
     "fpga_sha256": "64d583215331d8b854dcc313be1fb82e171d601f5c11e45fd84d483c17bbc4ff",
     "packages": {
-      "luci-app-fttr": "2026.11.15.105855-r1",
-      "openwrt-fttr": "0.1.0-r1",
+      "luci-app-fttr": "2026.11.17.1-r1",
+      "openwrt-fttr": "0.1.0-r2",
       "h3c-fmcs-firmware": "1.0-r1",
       "honk": "2026.11.12-r1",
       "luci-app-honk": "2026.11.12.2-r1",
@@ -151,8 +162,8 @@
       "luci-app-ota": "1.0.2-r1",
       "airoha-ponctl": "0.2.0-r1",
       "airoha-pond": "0.3.0-r3",
-      "kmod-airoha-xpon": "6.18.60-r70",
-      "kmod-airoha-pon-frontend": "6.18.60-r13",
+      "kmod-airoha-xpon": "6.12.116-r70",
+      "kmod-airoha-pon-frontend": "6.12.116-r13",
       "luci-app-airoha-npu": "1.2.1-r1",
       "luci-app-natmode": "0.1.6-r1",
       "luci-app-pon-status": "0.4.6-r4",
@@ -161,7 +172,23 @@
       "luci-app-iptv": "0.1.0-r1",
       "igmpproxy": "0.4-r1",
       "ttyd": "1.7.7-r1",
-      "luci-app-ttyd": "26.315.10273~ad75cde"
+      "luci-app-ttyd": "26.315.10183~8f18275",
+      "kmod-h3c-fmcs": "6.12.116-r2"
+    },
+    "fttr_ports": {
+      "enabled": true,
+      "fresh_count": 4,
+      "legacy_count": 16,
+      "minimum": 1,
+      "maximum": 16,
+      "apply": "device-reboot"
+    },
+    "fttr_assets_sha256": {
+      "www/luci-static/resources/view/fttr/index.js": "0491a9c4cb7effca09762c856c4f18dadf62406f491b37b5e16a99d9ba090590",
+      "www/luci-static/resources/view/fttr/config.js": "e974ce5fa3ac74a628db722f588be4158a70d7da41de84c7a3551e5fb3cc0da5",
+      "www/luci-static/resources/view/fttr/topology.js": "ac35cbd09514ada01442b0d8f877a0a998c9a092683901ce22510b187bd73ee5",
+      "usr/libexec/fttr-ports": "907e2239742b2211d1ef9f500b11263a8e7a3d52e7e2522db0c15bd62f6052fa",
+      "etc/init.d/h3c-fmcs": "634ca6c4c0d11e3a4b67a0ec4f1961c0ce00df1e87bdfa65103330853818b07a"
     }
   }
 }
