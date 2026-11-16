@@ -1,0 +1,20 @@
+{
+  "base": {
+    "url": "https://github.com/likz0421/hm2004-openwrt-stable.git",
+    "branch": "hm2004-openwrt-25.12",
+    "commit": "62d04864a9d7a71522824fb52e5c368af1d60b16",
+    "official_branch": "openwrt-25.12",
+    "official_commit": "60c494ad065fe3fcaeadf0e9ff4a8a2dc6e6be43",
+    "latest_stable_release": "25.12.6"
+  },
+  "fttr": {
+    "url": "https://github.com/likz0421/openwrt-fttr.git",
+    "branch": "hm2004-fttr-improvements",
+    "commit": "f9974706352022f2efcee6ab20b5ef2be7ece8ab"
+  },
+  "pon_drivers": {
+    "url": "https://github.com/pbs05/openwrt-pon-drivers.git",
+    "branch": "main",
+    "commit": "47ad31349807099cf84c8ca9fb1a3f10120ef9ee"
+  }
+}

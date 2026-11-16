@@ -1,0 +1,92 @@
+name: Verify HM2004 stable kernel and PON drivers
+on:
+  push:
+    branches: [hm-fttr-next]
+    paths:
+      - '.github/workflows/verify-hm2004-stable.yml'
+      - 'configs/hm2004-stable-kernel.config'
+      - 'configs/stable-kernel.lock.json'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  kernel:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 240
+    steps:
+      - uses: actions/checkout@v5
+      - name: Install build requirements
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends build-essential clang flex bison g++ gawk gcc-multilib gettext git libncurses-dev libssl-dev python3 python3-setuptools rsync swig unzip zlib1g-dev file wget curl perl xz-utils zstd libelf-dev dwarves
+          sudo rm -rf /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
+      - name: Checkout immutable stable and driver sources
+        run: |
+          set -euo pipefail
+          readarray -t pins < <(python3 - <<'PY'
+          import json
+          d=json.load(open('configs/stable-kernel.lock.json'))
+          for key in ['base','fttr','pon_drivers']:
+            print(d[key]['url']); print(d[key]['branch']); print(d[key]['commit'])
+          PY
+          )
+          git clone --depth 1 -b "${pins[1]}" "${pins[0]}" openwrt
+          git -C openwrt fetch --depth 1 origin "${pins[2]}"
+          git -C openwrt checkout --detach "${pins[2]}"
+          git clone --depth 1 -b "${pins[4]}" "${pins[3]}" fttr
+          git -C fttr fetch --depth 1 origin "${pins[5]}"
+          git -C fttr checkout --detach "${pins[5]}"
+          git clone --depth 1 -b "${pins[7]}" "${pins[6]}" pon-drivers
+          git -C pon-drivers fetch --depth 1 origin "${pins[8]}"
+          git -C pon-drivers checkout --detach "${pins[8]}"
+          mkdir -p openwrt/package/custom
+          cp -a fttr/h3c-fmcs fttr/h3c-fmcs-firmware openwrt/package/custom/
+          cp -a pon-drivers openwrt/package/custom/pon-drivers
+          rm -rf openwrt/package/custom/pon-drivers/.git
+      - name: Configure HM2004 only
+        working-directory: openwrt
+        run: |
+          cp ../configs/hm2004-stable-kernel.config .config
+          make defconfig
+          python3 - <<'PY'
+          from pathlib import Path
+          s=Path('.config').read_text()
+          required=['TARGET_airoha','TARGET_airoha_an7581','TARGET_DEVICE_airoha_an7581_DEVICE_h3c_hm2004-du','PACKAGE_kmod-h3c-fmcs','PACKAGE_h3c-fmcs-firmware','PACKAGE_kmod-airoha-xpon','PACKAGE_kmod-airoha-pon-frontend','PACKAGE_kmod-airoha-en7572']
+          missing=[x for x in required if 'CONFIG_'+x+'=y\n' not in s]
+          if missing: raise SystemExit('Missing configuration: '+', '.join(missing))
+          if 'KERNEL_PATCHVER:=6.12' not in Path('target/linux/airoha/Makefile').read_text(): raise SystemExit('Stable kernel changed')
+          PY
+      - name: Restore build cache
+        uses: actions/cache@v5
+        with:
+          path: |
+            openwrt/dl
+            openwrt/staging_dir
+            openwrt/build_dir/host*
+            openwrt/build_dir/toolchain-*
+          key: hm2004-stable-6.12-toolchain-v1-${{ runner.os }}
+      - name: Prepare and compile stable kernel
+        working-directory: openwrt
+        run: |
+          set -o pipefail
+          make tools/install toolchain/install -j$(nproc) 2>&1 | tee ../toolchain.log
+          make target/linux/prepare V=s -j1 2>&1 | tee ../kernel-prepare.log
+          make target/linux/compile V=s -j$(nproc) 2>&1 | tee ../kernel-compile.log
+      - name: Compile PON and FTTR kernel modules
+        working-directory: openwrt
+        run: |
+          set -o pipefail
+          make package/custom/pon-drivers/airoha-pon-frontends/compile V=s -j$(nproc) 2>&1 | tee ../pon-frontend-compile.log
+          make package/custom/pon-drivers/airoha-xpon/compile V=s -j$(nproc) 2>&1 | tee ../pon-driver-compile.log
+          make package/custom/h3c-fmcs/compile V=s -j$(nproc) 2>&1 | tee ../fmcs-driver-compile.log
+      - name: Upload diagnostic evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: hm2004-stable-kernel-evidence
+          path: |
+            *.log
+            openwrt/.config
+            openwrt/logs/
+            openwrt/bin/targets/
+          if-no-files-found: warn
