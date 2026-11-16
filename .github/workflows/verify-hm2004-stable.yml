@@ -51,7 +51,7 @@ jobs:
           python3 - <<'PY'
           from pathlib import Path
           s=Path('.config').read_text()
-          required=['TARGET_airoha','TARGET_airoha_an7581','TARGET_DEVICE_airoha_an7581_DEVICE_h3c_hm2004-du','PACKAGE_kmod-h3c-fmcs','PACKAGE_h3c-fmcs-firmware','PACKAGE_kmod-airoha-xpon','PACKAGE_kmod-airoha-pon-frontend','PACKAGE_kmod-airoha-en7572']
+          required=['TARGET_airoha','TARGET_airoha_an7581','TARGET_DEVICE_airoha_an7581_DEVICE_h3c_hm2004-du','PACKAGE_kmod-h3c-fmcs','PACKAGE_h3c-fmcs-firmware','PACKAGE_kmod-airoha-xpon','PACKAGE_kmod-airoha-pon-frontend','PACKAGE_kmod-airoha-en7572','PACKAGE_kmod-i2c-core']
           missing=[x for x in required if 'CONFIG_'+x+'=y\n' not in s]
           if missing: raise SystemExit('Missing configuration: '+', '.join(missing))
           if 'KERNEL_PATCHVER:=6.12' not in Path('target/linux/airoha/Makefile').read_text(): raise SystemExit('Stable kernel changed')
@@ -76,6 +76,7 @@ jobs:
         working-directory: openwrt
         run: |
           set -o pipefail
+          make package/kernel/linux/compile V=s -j$(nproc) 2>&1 | tee ../kernel-kmod-compile.log
           make package/custom/pon-drivers/airoha-pon-frontends/compile V=s -j$(nproc) 2>&1 | tee ../pon-frontend-compile.log
           make package/custom/pon-drivers/airoha-xpon/compile V=s -j$(nproc) 2>&1 | tee ../pon-driver-compile.log
           make package/custom/h3c-fmcs/compile V=s -j$(nproc) 2>&1 | tee ../fmcs-driver-compile.log
