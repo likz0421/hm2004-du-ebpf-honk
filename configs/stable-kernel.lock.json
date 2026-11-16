@@ -2,7 +2,7 @@
   "base": {
     "url": "https://github.com/likz0421/hm2004-openwrt-stable.git",
     "branch": "hm2004-openwrt-25.12",
-    "commit": "62d04864a9d7a71522824fb52e5c368af1d60b16",
+    "commit": "7fd46d7a6abbb84f9b8d566c13d597a3791112ae",
     "official_branch": "openwrt-25.12",
     "official_commit": "60c494ad065fe3fcaeadf0e9ff4a8a2dc6e6be43",
     "latest_stable_release": "25.12.6"
