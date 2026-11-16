@@ -70,7 +70,8 @@ def main():
         # All target libraries are required by the musl binary and ucode runtime.
         subprocess.run(["unsquashfs", "-q", "-d", str(root), str(squashfs),
                         "etc/*", "lib/*", "usr/sbin/fttrd", "usr/bin/ucode", "usr/bin/rtp2httpd",
-                        "usr/lib/*", "usr/libexec/*", "usr/share/ucode/*", "www/*"], check=True)
+                        "usr/lib/*", "usr/libexec/*", "usr/share/ucode/*",
+                        "usr/share/luci/menu.d/*", "usr/share/rpcd/acl.d/*", "www/*"], check=True)
         release = (root / "etc/openwrt_release").read_text()
         print(release, flush=True)
         desc = re.search(r"^DISTRIB_DESCRIPTION='(.*)'$", release, re.M)
