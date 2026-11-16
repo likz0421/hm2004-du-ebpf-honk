@@ -1,0 +1,24 @@
+{
+  "luci-app-onu": {
+    "description": "Read ONU telemetry without altering PON, network or flash",
+    "read": {
+      "cgi-io": ["exec"],
+      "uci": ["pon", "airoha-pon-debug"],
+      "ubus": {
+        "file": ["read"],
+        "system": ["board", "info"],
+        "network.device": ["status"]
+      },
+      "file": {
+        "/usr/sbin/ponctl --device pon0 status --json": ["exec"],
+        "/usr/bin/pondctl status --line line0": ["exec"],
+        "/usr/sbin/ponstat-conn": ["exec"],
+        "/etc/board.json": ["read"],
+        "/sys/class/net/pon0/xpon/serial_number": ["read"],
+        "/sys/class/net/pon0/xpon/active_serial_number": ["read"],
+        "/sys/class/net/pon0/statistics/rx_bytes": ["read"],
+        "/sys/class/net/pon0/statistics/tx_bytes": ["read"]
+      }
+    }
+  }
+}

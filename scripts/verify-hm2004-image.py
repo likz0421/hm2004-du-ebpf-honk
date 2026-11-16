@@ -54,6 +54,8 @@ def main():
             continue  # Core binary is statically sourced; manifest reports only the package wrapper.
         require(installed.get(name) == version, f"{name} = {version}; actual {installed.get(name)}")
     require(installed.get("honk") == lock["expected"]["packages"]["honk"], "Honk package wrapper version matches the audited feed")
+    require(installed.get("luci-app-onu") == lock["expected"]["packages"]["luci-app-onu"], "ONU frontend port version matches the audited lock")
+    require(installed.get("luci-i18n-onu-zh-cn") == lock["expected"]["packages"]["luci-i18n-onu-zh-cn"], "ONU Chinese catalog version matches the audited lock")
     with tempfile.TemporaryDirectory(prefix="verify-hm2004-") as temp:
         tmp = Path(temp)
         squashfs = tmp / "root.squashfs"
@@ -106,6 +108,17 @@ def main():
         rtp_init = (root / "etc/init.d/rtp2httpd").read_text()
         require("zerocopy_on_send" not in rtp_init, "rtp2httpd init does not send removed option")
         require("3.17.2" in target("usr/bin/rtp2httpd", "--help"), "target rtp2httpd binary reports 3.17.2")
+        require((root / "www/luci-static/resources/onu-dashboard/data.js").is_file(), "ONU read-only data adapter installed")
+        require((root / "www/luci-static/resources/onu-dashboard/components.js").is_file(), "ONU shared components installed")
+        for page in ["overview", "status", "hardware", "diagnostics"]:
+            require((root / f"www/luci-static/resources/view/onu-dashboard/{page}.js").is_file(), f"ONU page installed: {page}")
+        require((root / "www/luci-static/resources/view/onu-dashboard/dashboard.css").is_file(), "ONU dashboard stylesheet installed")
+        require((root / "www/luci-static/resources/view/onu-dashboard/onu.css").is_file(), "ONU PON stylesheet installed")
+        require((root / "usr/share/luci/menu.d/luci-app-onu.json").is_file(), "ONU menu installed")
+        acl_path = root / "usr/share/rpcd/acl.d/luci-app-onu.json"
+        require(acl_path.is_file(), "ONU read-only ACL installed")
+        acl = json.loads(acl_path.read_text())
+        require("write" not in acl.get("luci-app-onu", {}), "ONU ACL grants no write permissions")
         theme = root / "www/luci-static/resources/argon-compat.js"
         if not theme.is_file():
             theme = root / "www/luci-static/resources/argon/argon-compat.js"

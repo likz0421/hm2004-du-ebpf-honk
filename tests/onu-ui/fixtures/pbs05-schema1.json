@@ -1,0 +1,67 @@
+{
+  "pon": {
+    "schema_version": 1,
+    "line": {
+      "configured_mode": "xgspon",
+      "active_mode": "xgspon",
+      "mode_pending": false,
+      "lifecycle": "operational",
+      "optical_signal": true,
+      "phy_ready": true,
+      "xgtc_sync": "in-sync"
+    },
+    "registration": {
+      "onu_state": "O5",
+      "onu_id_valid": true,
+      "onu_id": 3,
+      "upstream_tx_armed": true
+    },
+    "frontend": {
+      "rx_power_dbm": -18.5,
+      "tx_power_dbm": 2.25,
+      "temperature_celsius": 42.5,
+      "calibration": "ready",
+      "tx_gate_enabled": true
+    },
+    "datapath": {
+      "service_ready": true,
+      "data_path_configured": true
+    },
+    "counters": {
+      "xgtc_rx": "18446744073709551615"
+    }
+  },
+  "omci": {
+    "protocol_version": 1,
+    "interface": "pon0",
+    "channel_available": true,
+    "loid_configured": false,
+    "authentication_status": null,
+    "authentication_meaning": "not-reported",
+    "backend_state": "applied",
+    "active_alloc_id": 1024,
+    "active_gem_id": 1025,
+    "vlan_ids": [
+      41
+    ],
+    "multicast_vlan_ids": [],
+    "igmp_upstream_vlan_ids": [],
+    "igmp_upstream_tag_controls": [],
+    "enhanced_security": false,
+    "broadcast_key_indexes": [],
+    "rx_messages": 12,
+    "parse_errors": 0
+  },
+  "oam": {
+    "protocol_version": 1,
+    "interface": "pon0",
+    "operator": "ctc",
+    "channel_available": true,
+    "ieee_discovery_completed": true,
+    "ctc_discovery_state": "operational",
+    "ctc_version": 32,
+    "loid_configured": false,
+    "authentication_status": "not-authenticated",
+    "vlan_ids": []
+  }
+}

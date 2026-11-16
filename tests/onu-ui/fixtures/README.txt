@@ -1,0 +1,1 @@
+Synthetic fixtures based on pbs05 a903fcc8: ponctl status.rs schema_version=1, OMCI/OAM control.rs protocol_version=1. No real device capture. O2_3, missing/null/invalid fields and mode-pending are injected by tests.
