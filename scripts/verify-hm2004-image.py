@@ -112,6 +112,8 @@ def main():
         require((root / "www/luci-static/resources/onu-dashboard/components.js").is_file(), "ONU shared components installed")
         for page in ["overview", "status", "hardware", "diagnostics"]:
             require((root / f"www/luci-static/resources/view/onu-dashboard/{page}.js").is_file(), f"ONU page installed: {page}")
+        require((root / "www/luci-static/resources/view/onu-dashboard/dashboard.css").is_file(), "ONU dashboard stylesheet installed")
+        require((root / "www/luci-static/resources/view/onu-dashboard/onu.css").is_file(), "ONU PON stylesheet installed")
         require((root / "usr/share/luci/menu.d/luci-app-onu.json").is_file(), "ONU menu installed")
         acl_path = root / "usr/share/rpcd/acl.d/luci-app-onu.json"
         require(acl_path.is_file(), "ONU read-only ACL installed")

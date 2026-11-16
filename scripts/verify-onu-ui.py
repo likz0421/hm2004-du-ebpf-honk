@@ -14,11 +14,12 @@ required = [
     "Makefile", "README.md", "UPSTREAM.json",
     "htdocs/luci-static/resources/onu-dashboard/data.js",
     "htdocs/luci-static/resources/onu-dashboard/components.js",
-    "htdocs/luci-static/resources/onu-dashboard/dashboard.css",
     "htdocs/luci-static/resources/view/onu-dashboard/overview.js",
     "htdocs/luci-static/resources/view/onu-dashboard/status.js",
     "htdocs/luci-static/resources/view/onu-dashboard/hardware.js",
     "htdocs/luci-static/resources/view/onu-dashboard/diagnostics.js",
+    "htdocs/luci-static/resources/view/onu-dashboard/dashboard.css",
+    "htdocs/luci-static/resources/view/onu-dashboard/onu.css",
     "po/zh_Hans/onu.po",
     "root/usr/share/luci/menu.d/luci-app-onu.json",
     "root/usr/share/rpcd/acl.d/luci-app-onu.json",
@@ -41,13 +42,17 @@ for token in ('"write"', '"upload"', 'pon-board-identity', 'airoha-pon-data', 'r
     if token in acl_text:
         raise SystemExit(f"ONU read-only ACL contains forbidden permission or operation: {token}")
 menu = json.loads((root / "root/usr/share/luci/menu.d/luci-app-onu.json").read_text())
-expected_paths = {"onu/overview", "onu/status", "onu/hardware", "onu/diagnostics"}
-actual_paths = {v["action"].get("path") for v in menu.values() if "action" in v and "path" in v["action"]}
+expected_paths = {"admin/onu/overview", "admin/onu/status", "admin/onu/hardware", "admin/onu/diagnostics"}
+actual_paths = {k for k, v in menu.items() if "action" in v and v["action"].get("path", "").startswith("onu-dashboard/")}
 if not expected_paths.issubset(actual_paths):
-    raise SystemExit("ONU menu is missing one or more read-only pages")
+    raise SystemExit(f"ONU menu is missing read-only pages (have {sorted(actual_paths)})")
+for k, v in menu.items():
+    if "action" in v and v["action"].get("path", "").startswith("onu-dashboard/"):
+        if k not in expected_paths:
+            raise SystemExit(f"Unexpected ONU menu entry {k}")
 upstream = json.loads((root / "UPSTREAM.json").read_text())
 if upstream.get("repository") != "naoki66/OpenWrt_ONU_CONFIG" or upstream.get("commit") != "3cb13560459f1d51136dac662baa1f399028b2b4":
     raise SystemExit("ONU UI upstream provenance changed unexpectedly")
-if "frontend-only" not in upstream.get("scope", ""):
+if "frontend-only" not in upstream.get("scope", "").lower():
     raise SystemExit("ONU UI provenance does not declare frontend-only scope")
 print(f"ONU frontend-only port verified: {len(required)} files, {len(actual_paths)} pages, no write/flash backend")
