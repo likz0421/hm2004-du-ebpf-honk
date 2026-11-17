@@ -75,7 +75,7 @@ def main():
         run(['patch','--batch','--forward','--fuzz=0','-p1','-i',patch],cwd=module)
     run(['make','-C',kernel,'M='+str(module/'src'),'-j2','modules'])
     root=work/'root';root.mkdir()
-    for d in ['bin','sbin','usr/bin','usr/sbin','etc','lib','proc','sys','dev','run','tmp']:(root/d).mkdir(parents=True,exist_ok=True)
+    for d in ['bin','sbin','usr/bin','usr/sbin','usr/lib','etc','lib','proc','sys','dev','run','tmp']:(root/d).mkdir(parents=True,exist_ok=True)
     release=sp.check_output(['make','-s','kernelrelease'],cwd=kernel,text=True).strip()
     run(['make','modules_install','INSTALL_MOD_PATH='+str(root),'INSTALL_MOD_STRIP=1'],cwd=kernel)
     moddir=root/'lib/modules'/release/'extra';moddir.mkdir(parents=True,exist_ok=True)
