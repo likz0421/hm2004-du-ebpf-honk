@@ -8,6 +8,15 @@
 PKG_SOURCE:=
 PKG_SOURCE_URL:=
 
+# A prebuilt compiler has no source tree for inherited prepare/configure hooks.
+Hooks/HostPrepare/Pre:=
+Hooks/HostPrepare/Post:=
+Hooks/HostConfigure/Pre:=
+Hooks/HostConfigure/Post:=
+Hooks/HostCompile/Pre:=
+Hooks/HostCompile/Post:=
+Hooks/HostInstall/Post:=
+
 define Host/Prepare
 endef
 

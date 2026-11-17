@@ -174,7 +174,7 @@
       "ttyd": "1.7.7-r1",
       "luci-app-ttyd": "26.315.10183~8f18275",
       "kmod-h3c-fmcs": "6.12.116-r4",
-      "kmod-nft-fullcone": "6.12.116-r4",
+      "kmod-nft-fullcone": "6.12.116.2023.05.17~07d93b62-r4",
       "nftables-json": "1.1.6-r3",
       "firewall4": "2025.03.17~b6e51575-r3"
     },

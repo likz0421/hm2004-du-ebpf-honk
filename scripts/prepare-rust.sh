@@ -5,11 +5,12 @@
 #   关键：target triple 必须向 feed 要、不能自己拼 —— 读
 #   feeds/packages/lang/rust/rust-values.mk 的 RUSTC_TARGET_ARCH，
 #   才能保证 CI 装的 target 与 OpenWrt 期望的一致。
-# ★ 全部软失败：rustup 缺失 / feed 结构不同 / 目标装不上，都只 warning 并
-#   退回源码自举。用法: bash prepare-rust.sh <openwrt_dir>
+# 必须在唯一一次 make defconfig 之后运行：ARCH 与 libc 后缀都来自最终
+# .config。预编译模式任一步失败即终止，不能静默退回数小时的源码自举。
+# 用法: bash prepare-rust.sh <openwrt_dir>
 # =============================================================
 
-set -uo pipefail
+set -euo pipefail
 
 OW="${1:-$PWD}"
 cd "$OW" || { echo "::error::无法进入 $OW"; exit 1; }
@@ -20,7 +21,8 @@ mkdir -p "$REPORT_DIR"
 REPORT="$REPORT_DIR/rust-toolchain.txt"
 
 log() { echo "$1" | tee -a "$REPORT"; }
-warn() { echo "::warning::$1"; echo "跳过: $1" >> "$REPORT"; }
+fail() { log "::error::$1"; exit 1; }
+warn() { log "::warning::$1"; }
 
 : > "$REPORT"
 log "===== Rust 预编译工具链 ====="
@@ -30,49 +32,40 @@ log "===== Rust 预编译工具链 ====="
 # ---------------------------------------------------------------
 RUST_FEED="$PWD/feeds/packages/lang/rust"
 if [ ! -f "$RUST_FEED/Makefile" ]; then
-  warn "Rust: 树里没有 feeds/packages/lang/rust，跳过"
-  exit 0
+  fail "Rust: 缺少 feeds/packages/lang/rust/Makefile"
 fi
 
 if [ ! -f "$RUST_FEED/rust-values.mk" ]; then
-  warn "Rust: 缺 rust-values.mk（拿不到 RUSTC_TARGET_ARCH），退回源码自举"
-  exit 0
+  fail "Rust: 缺 rust-values.mk，无法推导目标"
 fi
 
 # ---------------------------------------------------------------
-# 1. 向 feed 要 target triple
-#
-#   注意：prepare-rust.sh 在 make defconfig【之前】运行，此时 .config 里
-#   还没有 CONFIG_ARCH / CONFIG_TARGET_ARCH_PACKAGES（它们由 defconfig 展开），
-#   因此 rules.mk 的 ARCH 为空，RUSTC_TARGET_ARCH 会退化成 "-unknown-linux"，
-#   rustup target add 收到无效 triple 直接失败 → 退回源码自举 → 触发
-#   ci-llvm 下载 404 崩溃。这里从 target/linux/<board>/<subtarget>/target.mk
-#   直接读 ARCH 喂给 make，绕开对 .config 的依赖。
+# 1. 向固定 feed 要 target triple；只接受 defconfig 后的真实配置。
+#    不猜 ARCH，不补 libc 后缀，也不再次运行 defconfig（保留版本注入）。
 # ---------------------------------------------------------------
-BOARD_ARCH=$(sed -n 's/^ARCH:=//p' \
-  "$PWD"/target/linux/airoha/an7581/target.mk 2>/dev/null | head -1)
-if [ -z "$BOARD_ARCH" ]; then
-  # 兜底：从任意 target.mk 找 ARCH（多目标时取第一个），仍为空则退原逻辑
-  BOARD_ARCH=$(sed -n 's/^ARCH:=//p' \
-    "$PWD"/target/linux/*/*/target.mk 2>/dev/null | sort -u | head -1)
-fi
-
-RUST_TARGET=$(make --no-print-directory -s -f - TOPDIR="$PWD" \
-  BOARD_ARCH="$BOARD_ARCH" ci-rust-target <<'MAKE' 2>/dev/null
-CONFIG_ARCH := $(BOARD_ARCH)
--include $(TOPDIR)/.config
+[ -s .config ] || fail "Rust: 缺少最终 .config；请在 Validate configuration 后运行"
+if ! make --no-print-directory -s -f - TOPDIR="$PWD" ci-rust-values \
+  > "$REPORT_DIR/rust-values.txt" 2> "$REPORT_DIR/rust-values-errors.txt" <<'MAKE'
 include $(TOPDIR)/rules.mk
 include $(TOPDIR)/feeds/packages/lang/rust/rust-values.mk
-.PHONY: ci-rust-target
-ci-rust-target:
-	@printf '%s\n' '$(RUSTC_TARGET_ARCH)'
+.PHONY: ci-rust-values
+ci-rust-values:
+	@printf '%s\n' '$(CONFIG_HAVE_DOT_CONFIG)' '$(ARCH)' '$(TARGET_SUFFIX)' '$(RUSTC_TARGET_ARCH)' '$(STAGING_DIR)/host/bin'
 MAKE
-)
-if [ -z "$RUST_TARGET" ]; then
-  warn "Rust: RUSTC_TARGET_ARCH 为空，退回源码自举"
-  exit 0
+then
+  cat "$REPORT_DIR/rust-values-errors.txt" >&2
+  fail "Rust: 无法读取最终目标，make 查询失败"
 fi
+mapfile -t RUST_VALUES < "$REPORT_DIR/rust-values.txt"
+[ "${#RUST_VALUES[@]}" = 5 ] || fail "Rust: make 目标查询输出不完整"
+[ "${RUST_VALUES[0]}" = y ] && [ -n "${RUST_VALUES[1]}" ] \
+  && [ -n "${RUST_VALUES[2]}" ] || fail "Rust: .config 尚未 defconfig 展开，缺 ARCH/libc suffix"
+RUST_TARGET=${RUST_VALUES[3]}
+RUST_STAGING_BIN=${RUST_VALUES[4]}
+[[ "$RUST_TARGET" =~ ^[a-zA-Z0-9_]+-[a-zA-Z0-9_.-]+-[a-zA-Z0-9_.-]+-[a-zA-Z0-9_.-]+$ ]] \
+  || fail "Rust: 无效或不完整的目标 triple: $RUST_TARGET"
 log "Rust target: $RUST_TARGET"
+log "Rust target staging: $RUST_STAGING_BIN"
 
 # ---------------------------------------------------------------
 # 2. 找 rustup（runner 预装，但 PATH 未必包含 ~/.cargo/bin）
@@ -84,12 +77,11 @@ if [ -z "$RUSTUP_BIN" ]; then
   done
 fi
 if [ -z "$RUSTUP_BIN" ]; then
-  warn "Rust: runner 没有 rustup（需 apt 安装 rustup），退回源码自举"
-  exit 0
+  fail "Rust: runner 缺少 rustup，预编译模式不可用"
 fi
 PATH="$(dirname "$RUSTUP_BIN"):$PATH"; export PATH
 
-RUST_TOOLCHAIN=$(rustup show active-toolchain 2>/dev/null | awk '{print $1}')
+RUST_TOOLCHAIN=$(rustup show active-toolchain | cut -d' ' -f1)
 [ -n "$RUST_TOOLCHAIN" ] || RUST_TOOLCHAIN=stable
 log "Rust toolchain: $RUST_TOOLCHAIN"
 
@@ -97,14 +89,12 @@ log "Rust toolchain: $RUST_TOOLCHAIN"
 # 3. 装对应的 target
 # ---------------------------------------------------------------
 if ! rustup target add --toolchain "$RUST_TOOLCHAIN" "$RUST_TARGET" 2>&1 | tee -a "$REPORT"; then
-  warn "Rust: rustup target add $RUST_TARGET 失败，退回源码自举"
-  exit 0
+  fail "Rust: rustup target add $RUST_TARGET 失败，停止预编译构建"
 fi
 
 RUST_ROOT=$(rustup run "$RUST_TOOLCHAIN" rustc --print sysroot 2>/dev/null)
 if [ -z "$RUST_ROOT" ] || [ ! -d "$RUST_ROOT" ]; then
-  warn "Rust: rustc --print sysroot 失败，退回源码自举"
-  exit 0
+  fail "Rust: rustc --print sysroot 未返回可用目录"
 fi
 
 # ---------------------------------------------------------------
@@ -112,48 +102,40 @@ fi
 #    否则后面编译会因为缺 std 而失败，不如现在就退回
 # ---------------------------------------------------------------
 if [ ! -d "$RUST_ROOT/lib/rustlib/$RUST_TARGET/lib" ]; then
-  warn "Rust: 缺 $RUST_TARGET 的 std（$RUST_ROOT/lib/rustlib/$RUST_TARGET/lib），退回源码自举"
-  exit 0
+  fail "Rust: 缺少 $RUST_TARGET 的目标标准库目录"
 fi
 for t in cargo rustc rustdoc; do
   if [ ! -x "$RUST_ROOT/bin/$t" ]; then
-    warn "Rust: 缺 $RUST_ROOT/bin/$t，退回源码自举"
-    exit 0
+    fail "Rust: 缺少可执行工具 $RUST_ROOT/bin/$t"
   fi
 done
 
 # ---------------------------------------------------------------
-# 4.4 可选：按 feed 的版本另装一个 toolchain（RUST_PIN_FEED=1）
-#
-#   默认用 runner 的 stable —— 0 秒，够用。但 stable 会随镜像升级，
-#   同一个 commit 隔几周编出来的 rust 二进制 codegen 可能不同。
-#   要求「产物可复现 / 与官方构建逐字节接近」时打开这个开关：
-#   它读 feeds/packages/lang/rust/Makefile 的 PKG_VERSION，
-#   装一个同版本 toolchain（约 1~3 分钟），失败就退回 runner 的。
+# 4.4 可选固定到 feed 版本；固定失败必须报错，不能偷偷换回 stable。
 # ---------------------------------------------------------------
-if [ "${RUST_PIN_FEED:-0}" = "1" ]; then
-  FEED_VER=$(sed -n 's/^PKG_VERSION:=//p' "$RUST_FEED/Makefile" 2>/dev/null | head -1 | tr -d ' \r')
-  PIN_OK=0
-  if [ -z "$FEED_VER" ]; then
-    warn "Rust: 读不到 feed 的 PKG_VERSION，继续用 runner 的 $RUST_TOOLCHAIN"
-  else
-    if ! rustup run "$FEED_VER" rustc --version >/dev/null 2>&1; then
-      log "按 feed 版本安装 toolchain: $FEED_VER"
-      rustup toolchain install "$FEED_VER" --profile minimal >>"$REPORT" 2>&1 || true
-    fi
-    # 无论是不是刚装的，都要确认这个 toolchain 上有目标平台的 std
-    rustup target add --toolchain "$FEED_VER" "$RUST_TARGET" >>"$REPORT" 2>&1 || true
-    PIN_ROOT=$(rustup run "$FEED_VER" rustc --print sysroot 2>/dev/null || true)
-    if [ -n "$PIN_ROOT" ] && [ -d "$PIN_ROOT/lib/rustlib/$RUST_TARGET/lib" ] \
-       && [ -x "$PIN_ROOT/bin/rustc" ]; then
-      RUST_TOOLCHAIN=$FEED_VER
-      RUST_ROOT=$PIN_ROOT
-      PIN_OK=1
-      log "已切到 feed 版本: rustc $("$RUST_ROOT/bin/rustc" --version 2>&1)"
-    fi
-    [ "$PIN_OK" = 1 ] || warn "Rust: $FEED_VER 不可用（或没有 $RUST_TARGET 的 std），继续用 runner 的 $RUST_TOOLCHAIN"
-  fi
+FEED_VER=$(rg '^PKG_VERSION:=' "$RUST_FEED/Makefile" | cut -d= -f2 | tr -d ' \r')
+[ -n "$FEED_VER" ] || fail "Rust: 无法读取固定 feed 的 PKG_VERSION"
+if [[ "${RUST_PIN_FEED:-false}" = 1 || "${RUST_PIN_FEED:-false}" = true ]]; then
+  RUST_TOOLCHAIN=$FEED_VER
+  rustup toolchain install "$RUST_TOOLCHAIN" --profile minimal 2>&1 | tee -a "$REPORT"
+  rustup target add --toolchain "$RUST_TOOLCHAIN" "$RUST_TARGET" 2>&1 | tee -a "$REPORT"
+  RUST_ROOT=$(rustup run "$RUST_TOOLCHAIN" rustc --print sysroot)
 fi
+for t in cargo rustc rustdoc; do
+  [ -x "$RUST_ROOT/bin/$t" ] || fail "Rust: 工具链缺少 $t"
+  "$RUST_ROOT/bin/$t" --version >> "$REPORT"
+done
+compgen -G "$RUST_ROOT/lib/rustlib/$RUST_TARGET/lib/libstd-*.rlib" > /dev/null \
+  || fail "Rust: $RUST_TARGET 标准库缺少 libstd rlib"
+compgen -G "$RUST_ROOT/lib/rustlib/$RUST_TARGET/lib/libcore-*.rlib" > /dev/null \
+  || fail "Rust: $RUST_TARGET 标准库缺少 libcore rlib"
+PROBE_DIR=$(mktemp -d "$REPORT_DIR/rust-probe.XXXXXX")
+trap 'rm -rf "$PROBE_DIR"' EXIT
+printf '%s\n' 'pub fn probe() -> usize { std::mem::size_of::<usize>() }' > "$PROBE_DIR/probe.rs"
+"$RUST_ROOT/bin/rustc" --target "$RUST_TARGET" --crate-type rlib --emit=metadata \
+  -o "$PROBE_DIR/probe.rmeta" "$PROBE_DIR/probe.rs"
+[ -s "$PROBE_DIR/probe.rmeta" ] || fail "Rust: 目标 std 编译测试没有输出"
+log "PASS: Rust target std compilation: $RUST_TARGET"
 
 # ---------------------------------------------------------------
 # 4.5 纠正 staging_dir 里那三个「指向上次 runner」的符号链接
@@ -163,7 +145,7 @@ fi
 #   看起来像缓存坏了。这里就地改正，只动符号链接、不碰真实二进制。
 # ---------------------------------------------------------------
 LINKED=0
-for d in "$PWD/staging_dir/host/bin" "$PWD/staging_dir/hostpkg/bin"; do
+for d in "$RUST_STAGING_BIN" "$PWD/staging_dir/host/bin" "$PWD/staging_dir/hostpkg/bin"; do
   [ -d "$d" ] || continue
   for t in cargo rustc rustdoc; do
     if [ -L "$d/$t" ]; then
@@ -182,8 +164,8 @@ fi
 #   随版本变，产物不完全相同；极少数 crate 在新版上会报错（版本相关，不是
 #   静默错误）。两个版本号并排打出来，出问题时一眼能判断是不是版本引起的。
 # ---------------------------------------------------------------
-FEED_RUST_VER=$(sed -n 's/^PKG_VERSION:=//p' "$RUST_FEED/Makefile" 2>/dev/null | head -1 | tr -d ' \r')
-RUNNER_RUST_VER=$("$RUST_ROOT/bin/rustc" --version 2>/dev/null | awk '{print $2}')
+FEED_RUST_VER=$FEED_VER
+RUNNER_RUST_VER=$("$RUST_ROOT/bin/rustc" --version | cut -d' ' -f2)
 log "rustc 版本：feed 期望 ${FEED_RUST_VER:-未知} ｜ 实际使用 ${RUNNER_RUST_VER:-未知}"
 if [ -n "${FEED_RUST_VER:-}" ] && [ -n "${RUNNER_RUST_VER:-}" ] \
    && [ "$FEED_RUST_VER" != "$RUNNER_RUST_VER" ]; then
@@ -220,10 +202,18 @@ perl -i -pe '
   elsif ($_ =~ /^$h$/) { $_ = "$ENV{CI_MARKER}\n" . $_; }   # 再插到 HostBuild 之前
 ' "$RUST_MAKEFILE"
 
-if ! grep -Fxq "$MARKER" "$RUST_MAKEFILE"; then
-  warn "Rust: 注入 ci-prebuilt.mk 失败，退回源码自举"
-  exit 0
-fi
+[ -s "$RUST_FEED/ci-prebuilt.mk" ] || fail "Rust: ci-prebuilt.mk 缺失或为空"
+python3 - "$RUST_MAKEFILE" <<'PY'
+from pathlib import Path
+import sys
+lines = Path(sys.argv[1]).read_text().splitlines()
+marker = 'include ./ci-prebuilt.mk'
+hostbuild = '$(eval $(call HostBuild))'
+if lines.count(marker) != 1 or lines.count(hostbuild) != 1:
+    sys.exit('Rust: expected one prebuilt include and one HostBuild')
+if lines.index(marker) + 1 != lines.index(hostbuild):
+    sys.exit('Rust: prebuilt must be immediately before HostBuild')
+PY
 # ⚠ 别把 $HOSTBUILD 直接放进带 $(...) 的字符串：
 #   它的内容是字面量 $(eval $(call HostBuild))，
 #   双引号里的 $(...) 会被 shell 当命令替换执行，
@@ -231,6 +221,15 @@ fi
 log "注入: $MARKER（在 HostBuild 求值之前）"
 
 "$RUST_ROOT/bin/rustc" --version | tee -a "$REPORT"
-log "✅ 使用 runner 的 Rust（$RUST_TOOLCHAIN），跳过源码自举（省 30~60 分钟）"
+log "PASS: runner Rust ($RUST_TOOLCHAIN) target std and prebuilt injection verified"
+python3 - "$REPORT_DIR/rust-toolchain.json" "$RUST_TARGET" "$RUST_ROOT" "$RUST_TOOLCHAIN" "$RUST_STAGING_BIN" "$FEED_RUST_VER" "$RUNNER_RUST_VER" <<'PY'
+from pathlib import Path
+import json
+import sys
+path, target, root, toolchain, staging_bin, expected, actual = sys.argv[1:]
+Path(path).write_text(json.dumps(dict(target=target, root=root, toolchain=toolchain,
+    staging_bin=staging_bin, feed_version=expected, actual_version=actual,
+    target_std_compiled=True, prebuilt_include_verified=True), indent=2) + '\n')
+PY
 sha256sum "$RUST_MAKEFILE" >> "$REPORT"
 exit 0

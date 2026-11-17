@@ -835,10 +835,8 @@ jobs:
       #    【唯一一次 defconfig】后续不再调用，避免 .config 被重新展开、
       #    机型配置里写死的选择被静默剔除。
       # =========================================================
-      # ★ 用 runner 预装工具替代源码编译（OpenWRT-CI 核心思路）：
-      #   Go external bootstrap 省 40~70 分钟、Rust prebuilt 省 30~60 分钟。
-      # ⚠ 必须在 make defconfig 之前 —— 脚本写进 .config 的项要由 defconfig 展开。
-      #   全部软失败：ponwrt 不支持时只 warning，退回源码编译。
+      # Go/BPF/Python 修改 .config，保留在 defconfig 前；Rust 只替换 host
+      # 规则，必须等 defconfig 展开 ARCH/libc suffix 后再读取真实 target。
       # =========================================================
       - name: Prepare host toolchain (Go / BPF / Python)
         if: env.PREBUILT_HOST == 'true'
@@ -849,17 +847,6 @@ jobs:
           [ -f "$S" ] || { echo "::warning::缺 $S，跳过 host 加速"; exit 0; }
           dos2unix "$S" 2>/dev/null || true
           bash "$S" "$BUILD_ROOT/openwrt"
-
-      - name: Prepare Rust toolchain (prebuilt)
-        if: env.PREBUILT_HOST == 'true'
-        continue-on-error: true
-        run: |
-          cd "$BUILD_ROOT/openwrt"
-          S="$GITHUB_WORKSPACE/scripts/prepare-rust.sh"
-          [ -f "$S" ] || { echo "::warning::缺 $S，跳过 rust 预编译"; exit 0; }
-          dos2unix "$S" 2>/dev/null || true
-          bash "$S" "$BUILD_ROOT/openwrt"
-
 
       # =========================================================
       # 9. defconfig + 配置校验
@@ -1050,6 +1037,13 @@ jobs:
           echo "CONFIG_TARGET_BOARD=$(grep '^CONFIG_TARGET_BOARD=' .config | cut -d'"' -f2)"
           echo "CONFIG_TARGET_SUBTARGET=$(grep '^CONFIG_TARGET_SUBTARGET=' .config | cut -d'"' -f2)"
 
+      # Rust 不改 .config，不增加 defconfig；准备失败立即终止预编译模式。
+      - name: Prepare Rust toolchain (prebuilt)
+        if: env.PREBUILT_HOST == 'true'
+        timeout-minutes: 15
+        run: |
+          bash "$GITHUB_WORKSPACE/scripts/prepare-rust.sh" "$BUILD_ROOT/openwrt"
+
       # =========================================================
       # 9.5 下载工具链源码 —— 只在缓存没恢复出工具链时才需要
       #     报错 "Can't open dl/musl-1.2.6.tar.gz" 就是这一步缺失导致的：
@@ -1122,6 +1116,13 @@ jobs:
           #   真正的戳是 staging_dir/host/stamp/.tools_compile_*，
           #   make install 自己会写，这里不用管。
           mkdir -p tmp && echo 1 > tmp/.build
+
+      - name: Verify installed prebuilt Rust host
+        if: env.PREBUILT_HOST == 'true'
+        timeout-minutes: 5
+        run: |
+          cd "$BUILD_ROOT/openwrt"
+          python3 "$GITHUB_WORKSPACE/scripts/verify-rust-prebuilt.py" "$PWD" --reports "$GITHUB_WORKSPACE/build-reports" --install
 
       # =========================================================
       # 10.02 host 侧 go / rust 从源码真实编译（prebuilt_host=false）
@@ -1402,6 +1403,33 @@ jobs:
           python3 "$GITHUB_WORKSPACE/scripts/verify-hm2004-image.py" "$BUILD_ROOT/openwrt" --tag "$GITHUB_REF_NAME"
           cp "$BUILD_ROOT/openwrt/configs.buildinfo" /tmp/configs.buildinfo 2>/dev/null || true
           cp "$BUILD_ROOT/openwrt/.config" "$BUILD_ROOT/openwrt/bin/targets/airoha/an7581/build.config"
+
+      # 验收失败的候选只留作诊断，不进入 Release/正式固件下载。
+      - name: Preserve unverified HM2004 candidate for diagnosis
+        if: >-
+          failure() && steps.compile.outcome == 'success'
+          && steps.verify_image.outcome == 'failure' && env.PROFILE == 'h3c_hm2004-du'
+        uses: actions/upload-artifact@v5
+        with:
+          name: UNVERIFIED-hm2004-${{ github.run_id }}
+          path: |
+            ${{ env.BUILD_ROOT }}/openwrt/bin/targets/airoha/an7581/*h3c_hm2004-du*
+            ${{ env.BUILD_ROOT }}/openwrt/bin/targets/airoha/an7581/*.json
+            ${{ env.BUILD_ROOT }}/openwrt/bin/targets/airoha/an7581/*.buildinfo
+          retention-days: 3
+
+      - name: Upload build diagnostics
+        if: always()
+        uses: actions/upload-artifact@v5
+        with:
+          name: build-diagnostics-${{ github.run_id }}
+          path: |
+            build-reports/
+            build-provenance.json
+            ${{ env.BUILD_ROOT }}/openwrt/.config
+          include-hidden-files: true
+          if-no-files-found: warn
+          retention-days: 7
 
       # =========================================================
       # 18.5 存新一代缓存
