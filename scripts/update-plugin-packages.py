@@ -83,10 +83,11 @@ def rtp2httpd(ow):
 
 def geosite(ow):
     file = ow / "feeds/packages/net/v2ray-geodata/Makefile"
-    spec = LOCK["archives"]["geosite"]
-    replace_once(file, "GEOSITE_VER:=20261108011013\n", f"GEOSITE_VER:={spec['version']}\n")
-    replace_once(file, "HASH:=dc4192dd1b644a38276ed06136d26e729fa674d25785adb38c87e040e92376b2", "HASH:=" + spec["sha256"])
-    print("GeoSite updated with independently downloaded SHA256; current GeoIP preserved")
+    for name, prefix in [("geosite", "GEOSITE"), ("geoip", "GEOIP")]:
+        spec = LOCK["archives"][name]
+        replace_once(file, f"{prefix}_VER:={spec['recipe_base_version']}\n", f"{prefix}_VER:={spec['version']}\n")
+        replace_once(file, "HASH:=" + spec["recipe_base_sha256"], "HASH:=" + spec["sha256"])
+    print("GeoSite and GeoIP use audited archives over the stable recipe baselines")
 
 
 def main():

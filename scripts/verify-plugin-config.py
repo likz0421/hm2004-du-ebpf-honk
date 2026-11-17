@@ -9,11 +9,14 @@ repo = Path(__file__).resolve().parents[1]
 lock = json.loads((repo / "configs/plugins.lock.json").read_text())
 config = dict(line.split("=", 1) for line in (ow / ".config").read_text().splitlines() if line.startswith("CONFIG_") and "=" in line)
 required = ["CONFIG_PACKAGE_" + name for name in lock["expected"]["packages"]]
-required += ["CONFIG_PACKAGE_kmod-h3c-fmcs", "CONFIG_KERNEL_DEBUG_INFO_BTF"]
+required += ["CONFIG_PACKAGE_kmod-h3c-fmcs", "CONFIG_KERNEL_DEBUG_INFO_BTF", "CONFIG_PACKAGE_kmod-nft-fullcone", "CONFIG_IMAGEOPT", "CONFIG_VERSIONOPT"]
 required += ["CONFIG_FTTR_" + part for part in ["PLATFORM_H3C_HM2004_DU", "DEVICE_HL202", "DEVICE_HWTC", "DEVICE_STAR", "DEVICE_ZTE", "DEVICE_SCTY", "DEVICE_FIBERHOME", "DEVICE_REALTEK", "ACS", "MQTT", "NPU", "MIMALLOC"]]
 missing = [key for key in required if config.get(key) != "y"]
 if missing:
     raise SystemExit("Missing required plugin settings after defconfig: " + ", ".join(missing))
+for key, expected in {"CONFIG_VERSION_DIST": "OpenWrt", "CONFIG_VERSION_NUMBER": lock["build_base"]["stable_release"]}.items():
+    if config.get(key) != json.dumps(expected):
+        raise SystemExit(f"Stable version setting lost after defconfig: {key}={config.get(key)}")
 devices = {key for key, value in config.items()
            if key.startswith("CONFIG_TARGET_DEVICE_airoha_") and value == "y"}
 if devices != {"CONFIG_TARGET_DEVICE_airoha_an7581_DEVICE_h3c_hm2004-du"}:

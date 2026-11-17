@@ -38,12 +38,12 @@ def checkout_base(directory):
     directory = Path(directory)
     remote = git(directory, "remote", "get-url", "origin").removesuffix(".git")
     if remote != spec["url"].removesuffix(".git"):
-        raise ValueError("HM2004 source repository differs from the audited pbs05 base")
+        raise ValueError("HM2004 source repository differs from the locked stable base")
     subprocess.run(["git", "-C", str(directory), "fetch", "--depth", "1", "origin", spec["commit"]], check=True)
     subprocess.run(["git", "-C", str(directory), "checkout", "--detach", spec["commit"]], check=True)
     if git(directory, "rev-parse", "HEAD") != spec["commit"]:
         raise ValueError("Failed to select the audited PonWrt base")
-    print(f"Pinned PonWrt base: {spec['commit']}", flush=True)
+    print(f"Pinned OpenWrt stable base: {spec['commit']}", flush=True)
 
 
 def manifest_data(openwrt):

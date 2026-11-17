@@ -1,4 +1,4 @@
-name: Build PonWrt (Airoha AN758x PON)
+name: Build HM2004 OpenWrt stable with FTTR improvements
 
 # =========================================================
 # 固件版本后缀（显示在 LuCI 概览页「固件版本」后面）
@@ -6,10 +6,10 @@ name: Build PonWrt (Airoha AN758x PON)
 # =========================================================
 env:
   BUILD_ROOT: /workdir
-  SOURCE: ${{ github.event.inputs.source || 'pbs05/ponwrt' }}
+  SOURCE: ${{ github.event.inputs.source || 'likz0421/hm2004-openwrt-stable' }}
   FW_AUTHOR: ${{ github.event.inputs.fw_author || 'likz' }}
-  REPO_URL: ${{ github.event.inputs.source == 'fork' && 'https://github.com/qwe-qaq/ponwrt' || 'https://github.com/pbs05/ponwrt' }}
-  FEEDS_CONF: ''
+  REPO_URL: https://github.com/likz0421/hm2004-openwrt-stable
+  FEEDS_CONF: configs/hm2004-stable.feeds.conf
   DIY_P1_SH: diy-part1.sh
   DIY_P2_SH: diy-part2.sh
   UPLOAD_BIN_DIR: false
@@ -26,7 +26,7 @@ env:
   RELEASE_BACKUP: ${{ github.event.inputs.release_backup == 'false' && 'false' || 'true' }}
   TZ: Asia/Shanghai
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
-  REPO_BRANCH: ${{ github.event.inputs.branch || 'master' }}
+  REPO_BRANCH: ${{ github.event.inputs.branch || 'hm2004-openwrt-25.12' }}
   SOC: ${{ github.event.inputs.soc || 'an7581' }}
   PROFILE: ${{ github.event.inputs.profile || 'h3c_hm2004-du' }}
   BUILD_SCOPE: ${{ github.event.inputs.scope || 'firmware' }}
@@ -36,10 +36,10 @@ env:
   OPT_CRYPTO_ARM64CE: ${{ github.event.inputs.opt_arm64ce == '1' && '1' || '0' }}
   OPT_CRYPTO_CHACHA:  ${{ github.event.inputs.opt_chacha  == '1' && '1' || '0' }}
   OPT_CRYPTO_EIP93:   ${{ github.event.inputs.opt_eip93   == '1' && '1' || '0' }}
-  PRIVATE_REPO: ${{ github.event.inputs.private_repo || 'LazuliKao/openwrt-fttr' }}
-  PRIVATE_REPO_BRANCH: ${{ github.event.inputs.private_repo_branch || 'main' }}
-  FTTR_LUCI_REPO: ${{ github.event.inputs.fttr_luci_repo || 'LazuliKao/luci-app-fttr' }}
-  FTTR_LUCI_BRANCH: ${{ github.event.inputs.fttr_luci_branch || 'main' }}
+  PRIVATE_REPO: ${{ github.event.inputs.private_repo || 'likz0421/openwrt-fttr' }}
+  PRIVATE_REPO_BRANCH: ${{ github.event.inputs.private_repo_branch || 'hm2004-fttr-improvements' }}
+  FTTR_LUCI_REPO: ${{ github.event.inputs.fttr_luci_repo || 'likz0421/luci-app-fttr' }}
+  FTTR_LUCI_BRANCH: ${{ github.event.inputs.fttr_luci_branch || 'package' }}
 
 
 on:
@@ -53,15 +53,14 @@ on:
       source:
         description: '编译源码仓库'
         required: true
-        default: 'pbs05/ponwrt'
+        default: 'likz0421/hm2004-openwrt-stable'
         type: choice
         options:
-          - fork
-          - pbs05/ponwrt
+          - likz0421/hm2004-openwrt-stable
       branch:
-        description: 'ponwrt 源码分支'
+        description: '官方 OpenWrt 25.12 稳定派生分支'
         required: true
-        default: 'master'
+        default: 'hm2004-openwrt-25.12'
       soc:
         description: 'SoC 平台'
         required: true
@@ -161,17 +160,17 @@ on:
           - 'true'
           - 'false'
       private_repo:
-        description: '拉取私有仓库（FTTR 三件套来源，需凭证）'
+        description: 'FTTR 三件套来源（固定修复版）'
         required: false
-        default: 'LazuliKao/openwrt-fttr'
+        default: 'likz0421/openwrt-fttr'
         type: choice
         options:
-          - LazuliKao/openwrt-fttr
+          - likz0421/openwrt-fttr
           - none
       private_repo_branch:
-        description: '私有仓库分支'
+        description: 'FTTR 修复分支'
         required: false
-        default: 'main'
+        default: 'hm2004-fttr-improvements'
       ssh:
         description: 'SSH connection to Actions (仅 main 分支、仓库所有者可触发)'
         required: false
@@ -206,6 +205,8 @@ jobs:
         uses: actions/checkout@v5
         with:
           persist-credentials: false
+      - name: Verify stable source locks
+        run: python3 scripts/verify-stable-source-locks.py
       - name: Resolve device profile
         id: resolve
         run: |
@@ -668,12 +669,12 @@ jobs:
           # ⚠ 用 SOURCE_SLUG（`pbs05/ponwrt` → `pbs05-ponwrt`），别用 SOURCE：
           #   key 里带 `/` 本身能存，但与工具链 key 的写法不一致，后续按前缀
           #   批量操作会漏掉这一条。
-          key: ponwrt-dl-${{ env.SOURCE_SLUG }}-${{ github.event.inputs.branch || 'master' }}-${{ steps.resolve.outputs.week }}
+          key: ponwrt-dl-${{ env.SOURCE_SLUG }}-${{ github.event.inputs.branch || 'hm2004-openwrt-25.12' }}-${{ steps.resolve.outputs.week }}
           # 第二条是旧格式（SOURCE 原值，带斜杠）：只为平滑迁移，本轮拿到本周
           # 那份 1.2 GB 后会按新格式存一份，旧的 7 天无访问自动回收。下版可删。
           restore-keys: |
-            ponwrt-dl-${{ env.SOURCE_SLUG }}-${{ github.event.inputs.branch || 'master' }}-
-            ponwrt-dl-${{ env.SOURCE }}-${{ github.event.inputs.branch || 'master' }}-
+            ponwrt-dl-${{ env.SOURCE_SLUG }}-${{ github.event.inputs.branch || 'hm2004-openwrt-25.12' }}-
+            ponwrt-dl-${{ env.SOURCE }}-${{ github.event.inputs.branch || 'hm2004-openwrt-25.12' }}-
 
       # =========================================================
       # 4. 更新并安装 Feeds
@@ -681,7 +682,8 @@ jobs:
       - name: Update & install feeds
         run: |
           cd "$BUILD_ROOT/openwrt"
-          if [ -n "${FEEDS_CONF}" ] && [ -e "$GITHUB_WORKSPACE/${FEEDS_CONF}" ]; then
+          if [ -n "${FEEDS_CONF}" ]; then
+            test -f "$GITHUB_WORKSPACE/${FEEDS_CONF}" || { echo "::error::Missing stable feeds configuration: ${FEEDS_CONF}"; exit 1; }
             cp "$GITHUB_WORKSPACE/${FEEDS_CONF}" feeds.conf.default
           fi
           if [[ "${PROFILE}" == h3c_hm2004-du ]]; then
@@ -1332,7 +1334,7 @@ jobs:
         uses: actions/cache/save@v5
         continue-on-error: true
         with:
-          key: ponwrt-dl-${{ env.SOURCE_SLUG }}-${{ github.event.inputs.branch || 'master' }}-${{ steps.resolve.outputs.week }}
+          key: ponwrt-dl-${{ env.SOURCE_SLUG }}-${{ github.event.inputs.branch || 'hm2004-openwrt-25.12' }}-${{ steps.resolve.outputs.week }}
           path: /workdir/openwrt/dl
 
       # =========================================================

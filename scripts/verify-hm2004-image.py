@@ -47,7 +47,9 @@ def main():
     images = list((ow / "bin/targets").glob("*/*/*h3c_hm2004-du-squashfs-sysupgrade.itb"))
     require(len(images) == 1, "exactly one HM2004 sysupgrade image")
     image = images[0]
-    manifest = image.parent / "ponwrt-airoha-an7581-h3c_hm2004-du.manifest"
+    manifests = list(image.parent.glob("*airoha-an7581-h3c_hm2004-du.manifest"))
+    require(len(manifests) == 1, "exactly one HM2004 package manifest")
+    manifest = manifests[0]
     installed = dict(line.split(" - ", 1) for line in manifest.read_text().splitlines() if " - " in line)
     for name, version in lock["expected"]["packages"].items():
         if name == "honk-core":
@@ -67,7 +69,7 @@ def main():
         root = tmp / "root"
         # All target libraries are required by the musl binary and ucode runtime.
         subprocess.run(["unsquashfs", "-q", "-d", str(root), str(squashfs),
-                        "etc/*", "lib/*", "usr/sbin/fttrd", "usr/bin/ucode", "usr/bin/rtp2httpd",
+                        "etc/*", "lib/*", "usr/sbin/fttrd", "usr/bin/ucode", "usr/bin/rtp2httpd", "usr/bin/honk-core",
                         "usr/lib/*", "usr/libexec/*", "usr/share/ucode/*", "www/*"], check=True)
         release = (root / "etc/openwrt_release").read_text()
         print(release, flush=True)
@@ -78,7 +80,7 @@ def main():
         embedded = json.loads(provenance.read_text())
         for field in ("build_base", "sources", "feeds", "archives", "expected"):
             require(embedded.get(field) == lock.get(field), f"embedded {field} matches audited lock")
-        require(embedded.get("build_source") == lock["build_base"]["commit"], "firmware uses the audited pbs05 base commit")
+        require(embedded.get("build_source") == lock["build_base"]["commit"], "firmware uses the locked OpenWrt stable derived commit")
         require(embedded.get("feed_commits") == {name: spec["commit"] for name, spec in lock["feeds"].items()}, "actual checked-out feed commits match locks")
         require(bool(embedded.get("build_repo")), "build repository commit recorded")
         qemu = shutil.which("qemu-aarch64-static") or shutil.which("qemu-aarch64")
@@ -94,7 +96,48 @@ def main():
         require(any(item.get("id") == "auto" for item in caps["adapters"]["omci"]), "auto OMCI adapter exists in pinned upstream")
         config = (root / "etc/config/fttr").read_text()
         require("config omci_auth 'global'" in config and "option auth_mode 'disabled'" in config, "ONU authentication defaults to disabled")
+        ports = re.search(r"(?ms)^config\s+ports\s+['\"]ports['\"]\s*$(.*?)(?=^config\s|\Z)", config)
+        require(ports is not None, "FTTR downstream port configuration installed")
+        for key, value in [("enabled", "1"), ("count", "4")]:
+            require(re.search(r"option\s+" + key + r"\s+['\"]" + value + r"['\"]", ports.group(1)) is not None,
+                    f"FTTR fresh {key}={value}")
+        for relative, expected in lock["expected"]["fttr_assets_sha256"].items():
+            file = root / relative
+            require(file.is_file() and hashlib.sha256(file.read_bytes()).hexdigest() == expected,
+                    "FTTR paired artifact hash: " + relative)
+        init_link = root / "etc/rc.d/S19h3c-fmcs"
+        require(init_link.is_symlink() and str(init_link.readlink()).endswith("init.d/h3c-fmcs"),
+                "FMCS port-aware driver loads at S19 before network")
+        autoload = root / "etc/modules.d"
+        require(not any("h3c-fmcs" in file.read_text(errors="ignore") or "h3c_fmcs" in file.read_text(errors="ignore")
+                        for file in autoload.glob("*") if file.is_file()),
+                "no early FMCS autoload can bypass selected port count")
+        modules = list((root / "lib/modules").glob("*/h3c-fmcs.ko*"))
+        require(len(modules) == 1, "one FMCS kernel module installed")
+        module = modules[0]
+        if module.suffix == ".zst":
+            data = subprocess.check_output(["zstd", "-dc", str(module)])
+        elif module.suffix == ".xz":
+            import lzma
+            data = lzma.decompress(module.read_bytes())
+        elif module.suffix == ".gz":
+            import gzip
+            data = gzip.decompress(module.read_bytes())
+        else:
+            data = module.read_bytes()
+        require(b"parmtype=port_count:uint" in data and b"parm=port_count:" in data,
+                "FMCS module declares the real boot-time port_count parameter")
+        require(f"DISTRIB_RELEASE='{lock['build_base']['stable_release']}'" in release,
+                "firmware identifies the selected OpenWrt stable series")
         require(hashlib.sha256((root / "lib/firmware/FTTR_TOP.sbit").read_bytes()).hexdigest() == lock["expected"]["fpga_sha256"], "FPGA bitstream matches audited upstream")
+        honk_core = root / "usr/bin/honk-core"
+        require(honk_core.is_file() and bool(honk_core.stat().st_mode & 0o111),
+                "honk core executable is installed")
+        with honk_core.open("rb") as stream:
+            header = stream.read(20)
+        require(len(header) == 20 and header[:6] == b"\x7fELF\x02\x01"
+                and struct.unpack_from("<H", header, 18)[0] == 183,
+                "honk core is a 64-bit little-endian AArch64 ELF")
         honk = (root / "etc/config/honk").read_text()
         require(re.search(r"option\s+enabled\s+['\"]0['\"]", honk) is not None, "honk defaults disabled")
         lan = (root / "etc/uci-defaults/93-lan-dhcp").read_text()

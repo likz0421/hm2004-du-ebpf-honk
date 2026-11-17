@@ -88,8 +88,8 @@
     },
     "pon_drivers": {
       "branch": "main",
-      "url": "https://github.com/pbs05/openwrt-pon-drivers.git",
-      "commit": "47ad31349807099cf84c8ca9fb1a3f10120ef9ee"
+      "url": "https://github.com/likz0421/openwrt-pon-drivers.git",
+      "commit": "d1a4e307c3c528eb8cd91d86090dfaf8c2d6b66a"
     },
     "pon_userspace": {
       "branch": "main",
