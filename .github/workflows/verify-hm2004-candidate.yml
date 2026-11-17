@@ -1,0 +1,89 @@
+name: Verify existing HM2004 candidate
+on:
+  push:
+    branches: [hm-fttr-next]
+    paths:
+      - '.github/workflows/verify-hm2004-candidate.yml'
+      - 'configs/hm2004-candidate.json'
+      - 'scripts/fetch-hm2004-candidate.py'
+      - 'scripts/verify-hm2004-image.py'
+      - 'scripts/verify_fmcs_module.py'
+      - 'scripts/test-fmcs-module.py'
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v5
+      - name: Install verification tools
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends python3 gcc libc6-dev qemu-user-static squashfs-tools zstd git
+      - name: Download exact immutable candidate
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 scripts/fetch-hm2004-candidate.py
+      - name: Regression test actual stripped module and pinned driver functions
+        run: |
+          set -euo pipefail
+          mkdir -p reports
+          python3 - <<'PY' 2>&1 | tee reports/module-regression.log
+          from pathlib import Path
+          import gzip, json, lzma, mmap, struct, subprocess as sp, tempfile, urllib.request
+          pin = json.loads(Path('configs/stable-kernel.lock.json').read_text())['fttr']
+          with tempfile.TemporaryDirectory(prefix='fmcs-regression-') as temp:
+              temp = Path(temp)
+              base = pin['url'].removesuffix('.git').replace('https://github.com/', 'https://raw.githubusercontent.com/') + '/' + pin['commit']
+              for name in ['h3c-fmcs/src/fmcs_netdev.c', 'h3c-fmcs/src/fmcs.h', 'h3c-fmcs/tests/ports-driver-test.py']:
+                  dst = temp / name
+                  dst.parent.mkdir(parents=True, exist_ok=True)
+                  with urllib.request.urlopen(base + '/' + name, timeout=30) as r:
+                      dst.write_bytes(r.read())
+              sp.run(['python3', str(temp / 'h3c-fmcs/tests/ports-driver-test.py')], check=True)
+              image = next(Path('candidate/bin/targets').glob('*/*/*squashfs-sysupgrade.itb'))
+              with image.open('rb') as f, mmap.mmap(f.fileno(), 0, access=mmap.ACCESS_READ) as data:
+                  start = data.find(b'hsqs')
+                  assert start >= 0
+                  size = struct.unpack_from('<Q', data, start + 40)[0]
+                  assert 96 < size <= len(data) - start
+                  (temp / 'root.squashfs').write_bytes(data[start:start + size])
+              root = temp / 'root'
+              sp.run(['unsquashfs', '-q', '-d', str(root), str(temp / 'root.squashfs'), 'lib/modules/*/h3c-fmcs.ko*'], check=True)
+              module = next((root / 'lib/modules').glob('*/h3c-fmcs.ko*'))
+              data = module.read_bytes()
+              if module.suffix == '.zst': data = sp.check_output(['zstd', '-dc', str(module)])
+              elif module.suffix == '.xz': data = lzma.decompress(data)
+              elif module.suffix == '.gz': data = gzip.decompress(data)
+              (temp / 'fmcs.ko').write_bytes(data)
+              sp.run(['python3', 'scripts/test-fmcs-module.py', str(temp / 'fmcs.ko')], check=True)
+          PY
+      - name: Verify complete existing image
+        run: |
+          set -euo pipefail
+          readarray -t pin < <(python3 -c 'import json; d=json.load(open("configs/hm2004-candidate.json")); print(d["tag"]); print(d["build_commit"])')
+          python3 scripts/verify-hm2004-image.py candidate --tag "${pin[0]}" --build-commit "${pin[1]}" 2>&1 | tee reports/image-verification.log
+          cd candidate/bin/targets/airoha/an7581
+          sha256sum *.itb > sha256sums
+      - name: Upload independent verification evidence
+        if: always()
+        uses: actions/upload-artifact@v5
+        with:
+          name: hm2004-candidate-verification-${{ github.run_id }}
+          path: |
+            reports/
+            candidate/candidate-source.json
+            candidate/bin/targets/airoha/an7581/plugin-*.json
+            candidate/bin/targets/airoha/an7581/sha256sums
+          if-no-files-found: warn
+          retention-days: 14
+      - name: Upload verified unchanged candidate
+        if: success()
+        uses: actions/upload-artifact@v5
+        with:
+          name: VERIFIED-hm2004-candidate-${{ github.run_id }}
+          path: candidate/bin/targets/airoha/an7581/
+          retention-days: 14

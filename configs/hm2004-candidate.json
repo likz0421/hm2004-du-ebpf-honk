@@ -1,0 +1,10 @@
+{
+  "repository": "likz0421/hm2004-du-ebpf-honk",
+  "run_id": 44076768021,
+  "build_commit": "d323da7d547e05739c380eb0d835f4e8736b4667",
+  "artifact_id": 14331600047,
+  "artifact_name": "UNVERIFIED-hm2004-44076768021",
+  "artifact_sha256": "0e8cb69e71dba23db9aff3a4ad39c03ed311022c8ef13c1dd0f2dbb2fbb12693",
+  "sysupgrade_sha256": "24060cdf12a8c91486c6ebe4a4b5256cfc87241a3fc9da1da5f63382714f1f28",
+  "tag": "hm-fttr-next"
+}

@@ -10,6 +10,7 @@ import shutil
 import struct
 import subprocess
 import tempfile
+from verify_fmcs_module import verify_port_count
 
 
 def require(ok, message):
@@ -40,6 +41,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("openwrt", type=Path)
     parser.add_argument("--tag", required=True)
+    parser.add_argument("--build-commit", help="require this exact embedded firmware build commit")
     args = parser.parse_args()
     ow = args.openwrt.resolve()
     repo = Path(__file__).resolve().parents[1]
@@ -83,6 +85,8 @@ def main():
         require(embedded.get("build_source") == lock["build_base"]["commit"], "firmware uses the locked OpenWrt stable derived commit")
         require(embedded.get("feed_commits") == {name: spec["commit"] for name, spec in lock["feeds"].items()}, "actual checked-out feed commits match locks")
         require(bool(embedded.get("build_repo")), "build repository commit recorded")
+        if args.build_commit:
+            require(embedded.get("build_repo") == args.build_commit, "embedded build commit matches the downloaded candidate")
         qemu = shutil.which("qemu-aarch64-static") or shutil.which("qemu-aarch64")
         require(bool(qemu), "aarch64 user emulator available")
         def target(path, *params):
@@ -125,8 +129,10 @@ def main():
             data = gzip.decompress(module.read_bytes())
         else:
             data = module.read_bytes()
-        require(b"parmtype=port_count:uint" in data and b"parm=port_count:" in data,
-                "FMCS module declares the real boot-time port_count parameter")
+        # module_param_cb has no automatic parmtype, and MODULE_STRIPPED
+        # removes descriptions. Check the real __param + RELA registration.
+        fmcs_parameter = verify_port_count(data)
+        require(True, "FMCS ELF registers read-only boot-time port_count with custom setter, uint getter and default 16")
         require(f"DISTRIB_RELEASE='{lock['build_base']['stable_release']}'" in release,
                 "firmware identifies the selected OpenWrt stable series")
         require(hashlib.sha256((root / "lib/firmware/FTTR_TOP.sbit").read_bytes()).hexdigest() == lock["expected"]["fpga_sha256"], "FPGA bitstream matches audited upstream")
@@ -164,7 +170,7 @@ def main():
         require(theme.is_file(), "Argon 3.1.4 browser compatibility module installed")
         template_result = verify_argon_templates(root, qemu, tmp)
         (image.parent / "plugin-sources.json").write_text(json.dumps(embedded, ensure_ascii=False, indent=2) + "\n")
-        (image.parent / "plugin-verification.json").write_text(json.dumps({"tag":args.tag,"passed":True,"packages":lock["expected"]["packages"],"fttr_capabilities":caps,"sources":lock["sources"],"argon_templates":template_result}, ensure_ascii=False, indent=2) + "\n")
+        (image.parent / "plugin-verification.json").write_text(json.dumps({"tag":args.tag,"passed":True,"packages":lock["expected"]["packages"],"fttr_capabilities":caps,"sources":lock["sources"],"argon_templates":template_result,"fmcs_parameter":fmcs_parameter,"image_sha256":hashlib.sha256(image.read_bytes()).hexdigest(),"build_commit":embedded["build_repo"]}, ensure_ascii=False, indent=2) + "\n")
     print("All HM2004 image checks passed; target-device IPTV/WiFi traffic remains an on-device test.")
 
 
