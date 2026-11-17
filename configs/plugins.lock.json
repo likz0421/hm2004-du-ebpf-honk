@@ -17,7 +17,7 @@
     "fttr-backend": {
       "repo": "likz0421/openwrt-fttr",
       "branch": "hm2004-fttr-improvements",
-      "commit": "ee685e3f7b33727be60b65f1baec66c4bf49a246",
+      "commit": "31008bb8b9a5622a3f6447b8779749bad5d1c0dc",
       "previous_commit": "fb3128263663ceb8ac978c7cb0eec0be7963e953",
       "upstream_commit": "cbcf1308f45259100391accc9ede7ac3e545676c"
     },
@@ -173,7 +173,7 @@
       "igmpproxy": "0.4-r1",
       "ttyd": "1.7.7-r1",
       "luci-app-ttyd": "26.315.10183~8f18275",
-      "kmod-h3c-fmcs": "6.12.116-r3",
+      "kmod-h3c-fmcs": "6.12.116-r4",
       "kmod-nft-fullcone": "6.12.116-r4",
       "nftables-json": "1.1.6-r3",
       "firewall4": "2025.03.17~b6e51575-r3"

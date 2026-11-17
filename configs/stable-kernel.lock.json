@@ -10,7 +10,7 @@
   "fttr": {
     "url": "https://github.com/likz0421/openwrt-fttr.git",
     "branch": "hm2004-fttr-improvements",
-    "commit": "ee685e3f7b33727be60b65f1baec66c4bf49a246"
+    "commit": "31008bb8b9a5622a3f6447b8779749bad5d1c0dc"
   },
   "pon_drivers": {
     "url": "https://github.com/likz0421/openwrt-pon-drivers.git",

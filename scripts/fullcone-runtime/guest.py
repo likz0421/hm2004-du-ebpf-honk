@@ -31,16 +31,33 @@ RULESET='''table ip fc {
 }
 '''
 
+# Two veth namespaces share a /30 so that fullcone NAT applies to real
+# routed UDP traffic, not loopback (which masquerade/fullcone drops).
+def event_pair(ns):
+    run(['ip','link','add',f'{ns}-a','type','veth','peer','name',f'{ns}-b'])
+    run(['ip','link','set',f'{ns}-a','netns',ns])
+    run(['ip','-n',ns,'addr','add','10.99.0.1/30','dev',f'{ns}-a'])
+    run(['ip','-n',ns,'link','set',f'{ns}-a','up'])
+    peer=ns+'-peer'
+    run(['ip','netns','add',peer])
+    run(['ip','link','set',f'{ns}-b','netns',peer])
+    run(['ip','-n',peer,'addr','add','10.99.0.2/30','dev',f'{ns}-b'])
+    run(['ip','-n',peer,'link','set',f'{ns}-b','up'])
+    run(['ip','-n',peer,'link','set','lo','up'])
+    return peer
+
+def cleanup_peer(peer):
+    run(['ip','netns','del',peer])
+
 
 def expect_event(ns):
-    # Destroy one actual UDP conntrack while both subscribers are registered.
-    run(['ip','netns','exec',ns,'conntrack','-D','-p','udp','--dport','19191'],ok=False)
-    receiver=sp.Popen(['ip','netns','exec',ns,'python3','-c',"import socket,time;s=socket.socket(socket.AF_INET,socket.SOCK_DGRAM);s.bind(('127.0.0.1',19191));s.recvfrom(256);time.sleep(10)"])
+    peer=event_pair(ns)
+    receiver=sp.Popen(['ip','netns','exec',peer,'python3','-c',"import socket,time;s=socket.socket(socket.AF_INET,socket.SOCK_DGRAM);s.bind(('10.99.0.2',19191));s.recvfrom(256);time.sleep(10)"])
     output=open('/tmp/ct-events.log','w+')
     watcher=sp.Popen(['ip','netns','exec',ns,'conntrack','-E','-e','DESTROY','-o','timestamp'],stdout=output,stderr=output,text=True)
     try:
         time.sleep(.2)
-        run(['ip','netns','exec',ns,'python3','-c',"import socket;s=socket.socket(socket.AF_INET,socket.SOCK_DGRAM);s.sendto(b'test',('127.0.0.1',19191))"])
+        run(['ip','netns','exec',ns,'python3','-c',"import socket;s=socket.socket(socket.AF_INET,socket.SOCK_DGRAM);s.sendto(b'test',('10.99.0.2',19191))"])
         run(['ip','netns','exec',ns,'conntrack','-D','-p','udp','--dport','19191'])
         deadline=time.monotonic()+5
         while time.monotonic()<deadline:
@@ -57,6 +74,7 @@ def expect_event(ns):
         try:receiver.wait(timeout=3)
         except sp.TimeoutExpired:receiver.kill();receiver.wait()
         output.close()
+        cleanup_peer(peer)
 
 
 def lifecycle(order):
