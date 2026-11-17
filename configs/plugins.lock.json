@@ -4,7 +4,7 @@
   "build_base": {
     "url": "https://github.com/likz0421/hm2004-openwrt-stable",
     "branch": "hm2004-openwrt-25.12",
-    "commit": "448089dfb5d26555b091903675c4d4f8713d280b",
+    "commit": "ac48078c53212e6ebcfec465b0153f2f0af0cd40",
     "official_url": "https://github.com/openwrt/openwrt",
     "official_branch": "openwrt-25.12",
     "official_commit": "60c494ad065fe3fcaeadf0e9ff4a8a2dc6e6be43",
@@ -17,7 +17,7 @@
     "fttr-backend": {
       "repo": "likz0421/openwrt-fttr",
       "branch": "hm2004-fttr-improvements",
-      "commit": "f9974706352022f2efcee6ab20b5ef2be7ece8ab",
+      "commit": "ee685e3f7b33727be60b65f1baec66c4bf49a246",
       "previous_commit": "fb3128263663ceb8ac978c7cb0eec0be7963e953",
       "upstream_commit": "cbcf1308f45259100391accc9ede7ac3e545676c"
     },
@@ -173,7 +173,10 @@
       "igmpproxy": "0.4-r1",
       "ttyd": "1.7.7-r1",
       "luci-app-ttyd": "26.315.10183~8f18275",
-      "kmod-h3c-fmcs": "6.12.116-r2"
+      "kmod-h3c-fmcs": "6.12.116-r3",
+      "kmod-nft-fullcone": "6.12.116-r4",
+      "nftables-json": "1.1.6-r3",
+      "firewall4": "2025.03.17~b6e51575-r3"
     },
     "fttr_ports": {
       "enabled": true,

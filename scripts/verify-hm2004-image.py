@@ -69,8 +69,8 @@ def main():
         root = tmp / "root"
         # All target libraries are required by the musl binary and ucode runtime.
         subprocess.run(["unsquashfs", "-q", "-d", str(root), str(squashfs),
-                        "etc/*", "lib/*", "usr/sbin/fttrd", "usr/bin/ucode", "usr/bin/rtp2httpd", "usr/bin/honk-core",
-                        "usr/lib/*", "usr/libexec/*", "usr/share/ucode/*", "www/*"], check=True)
+                        "etc/*", "lib/*", "usr/sbin/fttrd", "usr/sbin/nft", "usr/bin/ucode", "usr/bin/rtp2httpd", "usr/bin/honk-core",
+                        "usr/lib/*", "usr/libexec/*", "usr/share/ucode/*", "usr/share/firewall4/*", "www/*"], check=True)
         release = (root / "etc/openwrt_release").read_text()
         print(release, flush=True)
         desc = re.search(r"^DISTRIB_DESCRIPTION='(.*)'$", release, re.M)
@@ -138,6 +138,15 @@ def main():
         require(len(header) == 20 and header[:6] == b"\x7fELF\x02\x01"
                 and struct.unpack_from("<H", header, 18)[0] == 183,
                 "honk core is a 64-bit little-endian AArch64 ELF")
+        require("1.1.6" in target("usr/sbin/nft", "--version"), "target nftables binary reports pinned stable version")
+        fullcone_modules=list((root / "lib/modules").glob("*/nft_fullcone.ko*"))
+        require(len(fullcone_modules) == 1, "one fullcone kernel module installed")
+        fw4=(root / "usr/share/ucode/fw4.uc").read_text()
+        rules=(root / "usr/share/firewall4/templates/ruleset.uc").read_text()
+        require("delete defs.fullcone6;" in fw4 and "due to masq_src/masq_dest address restrictions" in fw4,
+                "firewall probe fallback and restricted-zone protection installed")
+        require("zone.fullcone" in rules and "zone.fullcone6" in rules,
+                "firewall templates use per-zone fullcone decisions")
         honk = (root / "etc/config/honk").read_text()
         require(re.search(r"option\s+enabled\s+['\"]0['\"]", honk) is not None, "honk defaults disabled")
         lan = (root / "etc/uci-defaults/93-lan-dhcp").read_text()

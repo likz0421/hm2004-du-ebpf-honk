@@ -6,6 +6,8 @@ on:
       - '.github/workflows/verify-hm2004-stable.yml'
       - 'configs/hm2004-stable-kernel.config'
       - 'configs/stable-kernel.lock.json'
+      - 'scripts/verify-fullcone-userspace.py'
+      - 'scripts/fullcone-runtime/**'
   workflow_dispatch:
 permissions:
   contents: read
@@ -43,6 +45,8 @@ jobs:
           cp -a fttr/h3c-fmcs fttr/h3c-fmcs-firmware openwrt/package/custom/
           cp -a pon-drivers/airoha-pon-frontends pon-drivers/airoha-xpon openwrt/package/custom/
           rm -rf openwrt/package/custom/airoha-pon-frontends/.git openwrt/package/custom/airoha-xpon/.git
+      - name: Verify FMCS callback compatibility
+        run: python3 fttr/h3c-fmcs/tests/kernel-device-api-test.py
       - name: Configure HM2004 only
         working-directory: openwrt
         run: |
@@ -51,7 +55,7 @@ jobs:
           python3 - <<'PY'
           from pathlib import Path
           s=Path('.config').read_text()
-          required=['TARGET_airoha','TARGET_airoha_an7581','TARGET_DEVICE_airoha_an7581_DEVICE_h3c_hm2004-du','PACKAGE_kmod-h3c-fmcs','PACKAGE_h3c-fmcs-firmware','PACKAGE_kmod-airoha-xpon','PACKAGE_kmod-airoha-pon-frontend','PACKAGE_kmod-airoha-en7572','PACKAGE_kmod-i2c-core']
+          required=['TARGET_airoha','TARGET_airoha_an7581','TARGET_DEVICE_airoha_an7581_DEVICE_h3c_hm2004-du','PACKAGE_kmod-h3c-fmcs','PACKAGE_h3c-fmcs-firmware','PACKAGE_kmod-airoha-xpon','PACKAGE_kmod-airoha-pon-frontend','PACKAGE_kmod-airoha-en7572','PACKAGE_kmod-i2c-core','PACKAGE_kmod-nft-fullcone','PACKAGE_kmod-nf-conntrack-netlink','PACKAGE_libnftnl','PACKAGE_nftables-json','PACKAGE_firewall4']
           missing=[x for x in required if 'CONFIG_'+x+'=y\n' not in s]
           if missing: raise SystemExit('Missing configuration: '+', '.join(missing))
           if 'KERNEL_PATCHVER:=6.12' not in Path('target/linux/airoha/Makefile').read_text(): raise SystemExit('Stable kernel changed')
@@ -72,6 +76,18 @@ jobs:
           make tools/install toolchain/install -j$(nproc) 2>&1 | tee ../toolchain.log
           make target/linux/prepare V=s -j1 2>&1 | tee ../kernel-prepare.log
           make target/linux/compile V=s -j$(nproc) 2>&1 | tee ../kernel-compile.log
+      - name: Verify conntrack kernel configuration
+        working-directory: openwrt
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          configs=list(Path('build_dir').glob('target-*/linux-airoha_an7581/linux-6.12.*/.config'))
+          if len(configs) != 1: raise SystemExit('Expected one prepared kernel configuration')
+          config=configs[0].read_text()
+          for setting in ['CONFIG_NF_CONNTRACK_EVENTS=y','CONFIG_NF_CONNTRACK_CHAIN_EVENTS=y']:
+            if setting+'\n' not in config: raise SystemExit('Missing effective kernel setting: '+setting)
+            print('PASS:',setting)
+          PY
       - name: Compile PON and FTTR kernel modules
         working-directory: openwrt
         run: |
@@ -81,6 +97,13 @@ jobs:
           make package/custom/airoha-xpon/compile V=s -j$(nproc) 2>&1 | tee ../pon-driver-compile.log
           make package/custom/h3c-fmcs-firmware/compile V=s -j$(nproc) 2>&1 | tee ../fmcs-firmware-compile.log
           make package/custom/h3c-fmcs/compile V=s -j$(nproc) 2>&1 | tee ../fmcs-driver-compile.log
+      - name: Compile fullcone network packages
+        working-directory: openwrt
+        run: |
+          set -euo pipefail
+          for pkg in libs/toolchain libs/libmnl libs/libnftnl libs/jansson network/utils/nftables network/config/firewall4 network/utils/fullconenat-nft; do
+            make "package/$pkg/compile" V=s -j$(nproc) 2>&1 | tee "../network-${pkg##*/}-compile.log"
+          done
       - name: Verify PON and FTTR packages built
         working-directory: openwrt
         run: |
@@ -89,7 +112,7 @@ jobs:
           from pathlib import Path
           # kmods and firmware can use different package output directories.
           packages=[p for p in Path('bin').rglob('*') if p.is_file() and p.suffix in {'.ipk','.apk'} and p.stat().st_size > 0]
-          wanted=['kmod-i2c-core','kmod-airoha-pon-frontend','kmod-airoha-en7572','kmod-airoha-xpon','kmod-h3c-fmcs','h3c-fmcs-firmware']
+          wanted=['kmod-i2c-core','kmod-airoha-pon-frontend','kmod-airoha-en7572','kmod-airoha-xpon','kmod-h3c-fmcs','h3c-fmcs-firmware','kmod-nf-conntrack-netlink','kmod-nft-fullcone','libnftnl11','nftables-json','firewall4']
           found={name:[str(p) for p in packages if p.match(name+'_*.ipk') or p.match(name+'-[0-9]*.apk')] for name in wanted}
           for name, paths in found.items():
             print(name+': '+(', '.join(sorted(paths)) if paths else 'MISSING'))
@@ -106,4 +129,45 @@ jobs:
             openwrt/.config
             openwrt/logs/
             openwrt/bin/targets/
+          if-no-files-found: warn
+  fullcone-userspace:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v5
+      - name: Install native build requirements
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends build-essential autoconf automake libtool pkg-config bison flex libmnl-dev libjansson-dev git python3 xz-utils patch util-linux qemu-system-x86 busybox-static cpio kmod conntrack iproute2 libelf-dev libssl-dev bc zstd
+      - name: Checkout locked network sources
+        run: |
+          readarray -t pins < <(python3 - <<'PY'
+          import json
+          d=json.load(open('configs/stable-kernel.lock.json'))['base']
+          print(d['url']); print(d['branch']); print(d['commit'])
+          PY
+          )
+          git clone --depth 1 -b "${pins[1]}" "${pins[0]}" openwrt
+          git -C openwrt fetch --depth 1 origin "${pins[2]}"
+          git -C openwrt checkout --detach "${pins[2]}"
+      - name: Build and run JSON regression in network namespace
+        run: |
+          set -o pipefail
+          python3 scripts/verify-fullcone-userspace.py openwrt --work "$RUNNER_TEMP/fullcone-userspace" 2>&1 | tee fullcone-userspace.log
+      - name: Run fullcone in isolated Linux 6.12.116 guest
+        run: |
+          set -o pipefail
+          python3 scripts/fullcone-runtime/run.py openwrt --native-prefix "$RUNNER_TEMP/fullcone-userspace/prefix" --work "$RUNNER_TEMP/fullcone-runtime" 2>&1 | tee fullcone-runtime.log
+      - name: Upload userspace evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: hm2004-fullcone-userspace-evidence
+          path: |
+            fullcone-userspace.log
+            fullcone-runtime.log
+            ${{ runner.temp }}/fullcone-userspace/verification.json
+            ${{ runner.temp }}/fullcone-runtime/verification.json
+            ${{ runner.temp }}/fullcone-runtime/console.log
+            ${{ runner.temp }}/fullcone-runtime/linux-6.12.116/.config
           if-no-files-found: warn
