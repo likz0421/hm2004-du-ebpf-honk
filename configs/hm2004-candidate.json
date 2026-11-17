@@ -1,10 +1,11 @@
 {
   "repository": "likz0421/hm2004-du-ebpf-honk",
-  "run_id": 44076768021,
-  "build_commit": "d323da7d547e05739c380eb0d835f4e8736b4667",
-  "artifact_id": 14331600047,
-  "artifact_name": "UNVERIFIED-hm2004-44076768021",
-  "artifact_sha256": "0e8cb69e71dba23db9aff3a4ad39c03ed311022c8ef13c1dd0f2dbb2fbb12693",
-  "sysupgrade_sha256": "24060cdf12a8c91486c6ebe4a4b5256cfc87241a3fc9da1da5f63382714f1f28",
-  "tag": "hm-fttr-next"
+  "run_id": 44114858613,
+  "build_commit": "59298aec3b455ae3d94f8a5f67ea0e288efe82fb",
+  "source_ref": "v2026.11.30",
+  "artifact_id": 14349455983,
+  "artifact_name": "UNVERIFIED-hm2004-44114858613",
+  "artifact_sha256": "f8aff90209ad3949c6f2aa77d1941049950d12f15284ac3482ad4714bd7105fb",
+  "sysupgrade_sha256": "2d248e31c1a9885087e212677a7d0b03b430271a710f493abe14197614442b1d",
+  "tag": "v2026.11.30"
 }

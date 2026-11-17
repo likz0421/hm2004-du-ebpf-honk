@@ -19,7 +19,7 @@ def main():
     prefix = f"repos/{pin['repository']}"
     run = api(f"{prefix}/actions/runs/{pin['run_id']}")
     assert run['head_sha'] == pin['build_commit'], 'source run commit differs'
-    assert run['head_branch'] == 'hm-fttr-next', 'source branch differs'
+    assert run['head_branch'] == pin.get('source_ref', 'hm-fttr-next'), 'source branch/tag differs'
     assert run['path'] == '.github/workflows/build-ponwrt.yml', 'source workflow differs'
     assert run['status'] == 'completed', 'source build has not finished'
     jobs = api(f"{prefix}/actions/runs/{pin['run_id']}/jobs")['jobs']
