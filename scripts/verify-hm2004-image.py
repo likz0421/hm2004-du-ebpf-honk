@@ -4,6 +4,8 @@ import argparse
 import hashlib
 import json
 import mmap
+import os
+import platform
 from pathlib import Path
 import re
 import shutil
@@ -19,7 +21,7 @@ def require(ok, message):
     print("PASS", message, flush=True)
 
 
-def verify_argon_templates(root, qemu, temporary):
+def verify_argon_templates(root, qemu, temporary, native=False):
     template_dir = root / "usr/share/ucode/luci/template/themes/argon"
     templates = sorted(template_dir.glob("*.ut"))
     expected = {"footer.ut", "footer_login.ut", "head.ut", "head_meta.ut", "header.ut",
@@ -28,8 +30,12 @@ def verify_argon_templates(root, qemu, temporary):
     require({file.name for file in templates} == expected, "all 11 pinned Argon ucode templates installed")
     require(all(file.stat().st_size > 0 for file in templates), "Argon templates are non-empty source files")
     for file in templates:
-        command = [qemu, "-L", str(root), str(root / "usr/bin/ucode"), "-T", "-c",
-                   "-o", str(temporary / "template.ucb"), str(file)]
+        if native:
+            command = ["chroot", str(root), "/usr/bin/ucode", "-T", "-c",
+                       "-o", "/tmp/template.ucb", "/" + str(file.relative_to(root))]
+        else:
+            command = [qemu, "-L", str(root), str(root / "usr/bin/ucode"), "-T", "-c",
+                       "-o", str(temporary / "template.ucb"), str(file)]
         result = subprocess.run(command, text=True, capture_output=True, timeout=20)
         if result.returncode:
             raise ValueError(f"Argon template compile failed: {file.name}\n{result.stderr}\n{result.stdout}")
@@ -42,7 +48,11 @@ def main():
     parser.add_argument("openwrt", type=Path)
     parser.add_argument("--tag", required=True)
     parser.add_argument("--build-commit", help="require this exact embedded firmware build commit")
+    parser.add_argument("--native", action="store_true", help="run on native AArch64 Linux via chroot (requires root)")
     args = parser.parse_args()
+    if args.native:
+        require(platform.system() == "Linux" and platform.machine() in ("aarch64", "arm64"), "native verification host is ARM64 Linux")
+        require(os.geteuid() == 0, "native verification has chroot privilege")
     ow = args.openwrt.resolve()
     repo = Path(__file__).resolve().parents[1]
     lock = json.loads((repo / "configs/plugins.lock.json").read_text())
@@ -87,10 +97,18 @@ def main():
         require(bool(embedded.get("build_repo")), "build repository commit recorded")
         if args.build_commit:
             require(embedded.get("build_repo") == args.build_commit, "embedded build commit matches the downloaded candidate")
-        qemu = shutil.which("qemu-aarch64-static") or shutil.which("qemu-aarch64")
-        require(bool(qemu), "aarch64 user emulator available")
+        qemu = None if args.native else (shutil.which("qemu-aarch64-static") or shutil.which("qemu-aarch64"))
+        if args.native:
+            (root / "tmp").mkdir(exist_ok=True)
+        else:
+            require(bool(qemu), "aarch64 user emulator available")
         def target(path, *params):
-            return subprocess.check_output([qemu, "-L", str(root), str(root / path), *params], text=True, stderr=subprocess.PIPE, timeout=45)
+            command = (["chroot", str(root), "/" + path, *params] if args.native else
+                       [qemu, "-L", str(root), str(root / path), *params])
+            result = subprocess.run(command, text=True, capture_output=True, timeout=45)
+            if result.returncode:
+                raise ValueError(f"target {path} {params} exited {result.returncode}\nstdout: {result.stdout}\nstderr: {result.stderr}")
+            return result.stdout
         caps = json.loads(target("usr/sbin/fttrd", "--capabilities"))
         require(isinstance(caps.get("adapters"), dict), "FTTR grouped adapter schema")
         for layer, key in [("omci", "omci_adapters"), ("bootstrap", "bootstrap_adapters")]:
@@ -168,7 +186,7 @@ def main():
         if not theme.is_file():
             theme = root / "www/luci-static/resources/argon/argon-compat.js"
         require(theme.is_file(), "Argon 3.1.4 browser compatibility module installed")
-        template_result = verify_argon_templates(root, qemu, tmp)
+        template_result = verify_argon_templates(root, qemu, tmp, native=args.native)
         (image.parent / "plugin-sources.json").write_text(json.dumps(embedded, ensure_ascii=False, indent=2) + "\n")
         (image.parent / "plugin-verification.json").write_text(json.dumps({"tag":args.tag,"passed":True,"packages":lock["expected"]["packages"],"fttr_capabilities":caps,"sources":lock["sources"],"argon_templates":template_result,"fmcs_parameter":fmcs_parameter,"image_sha256":hashlib.sha256(image.read_bytes()).hexdigest(),"build_commit":embedded["build_repo"]}, ensure_ascii=False, indent=2) + "\n")
     print("All HM2004 image checks passed; target-device IPTV/WiFi traffic remains an on-device test.")

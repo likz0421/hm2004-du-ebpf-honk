@@ -15,14 +15,14 @@ permissions:
   actions: read
 jobs:
   verify:
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-24.04-arm
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v5
       - name: Install verification tools
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y --no-install-recommends python3 gcc libc6-dev qemu-user-static squashfs-tools zstd git
+          sudo apt-get install -y --no-install-recommends python3 gcc libc6-dev squashfs-tools zstd git util-linux
       - name: Download exact immutable candidate
         env:
           GH_TOKEN: ${{ github.token }}
@@ -65,7 +65,7 @@ jobs:
         run: |
           set -euo pipefail
           readarray -t pin < <(python3 -c 'import json; d=json.load(open("configs/hm2004-candidate.json")); print(d["tag"]); print(d["build_commit"])')
-          python3 scripts/verify-hm2004-image.py candidate --tag "${pin[0]}" --build-commit "${pin[1]}" 2>&1 | tee reports/image-verification.log
+          sudo unshare --net -- python3 scripts/verify-hm2004-image.py candidate --native --tag "${pin[0]}" --build-commit "${pin[1]}" 2>&1 | tee reports/image-verification.log
           cd candidate/bin/targets/airoha/an7581
           sha256sum *.itb > sha256sums
       - name: Upload independent verification evidence
