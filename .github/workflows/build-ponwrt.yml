@@ -699,6 +699,26 @@ jobs:
           fi
 
       # =========================================================
+      # 4.6 rust 包 ci-llvm 兜底
+      #    immortalwrt 的 rust 包把 download-ci-llvm=true，依赖
+      #    ci-artifacts.rust-lang.org 的 rust-dev 预编译 LLVM；该制品只保留
+      #    有限时间，已被删除（404）。即使 prepare-rust.sh 成功注入了
+      #    ci-prebuilt.mk 跳过源码自举，这里仍把 download-ci-llvm 强制置 false
+      #    作为兜底：万一退回源码自举，Rust bootstrap 会用系统 LLVM 或编译
+      #    src/llvm-project，而不是去下载已删除的 ci 制品（404 崩溃）。
+      #    只改 feed 内的 Makefile，不动仓库。
+      # =========================================================
+      - name: Force rust package offline LLVM (ci-llvm fallback)
+        run: |
+          RUST_MK="$BUILD_ROOT/openwrt/feeds/packages/lang/rust/Makefile"
+          if [ -f "$RUST_MK" ]; then
+            sed -i 's/--set=llvm.download-ci-llvm=true/--set=llvm.download-ci-llvm=false/' "$RUST_MK"
+            echo "::notice::rust ci-llvm 兜底已生效: $(grep -c 'download-ci-llvm=false' "$RUST_MK") 处"
+          else
+            echo "::warning::未找到 feeds/packages/lang/rust/Makefile，跳过 rust ci-llvm 兜底"
+          fi
+
+      # =========================================================
       # 5. diy-part1.sh —— 拉取可选插件
       # =========================================================
       - name: Pull optional plugins (diy-part1.sh)

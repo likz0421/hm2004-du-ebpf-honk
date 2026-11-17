@@ -41,8 +41,26 @@ fi
 
 # ---------------------------------------------------------------
 # 1. 向 feed 要 target triple
+#
+#   注意：prepare-rust.sh 在 make defconfig【之前】运行，此时 .config 里
+#   还没有 CONFIG_ARCH / CONFIG_TARGET_ARCH_PACKAGES（它们由 defconfig 展开），
+#   因此 rules.mk 的 ARCH 为空，RUSTC_TARGET_ARCH 会退化成 "-unknown-linux"，
+#   rustup target add 收到无效 triple 直接失败 → 退回源码自举 → 触发
+#   ci-llvm 下载 404 崩溃。这里从 target/linux/<board>/<subtarget>/target.mk
+#   直接读 ARCH 喂给 make，绕开对 .config 的依赖。
 # ---------------------------------------------------------------
-RUST_TARGET=$(make --no-print-directory -s -f - TOPDIR="$PWD" ci-rust-target <<'MAKE' 2>/dev/null
+BOARD_ARCH=$(sed -n 's/^ARCH:=//p' \
+  "$PWD"/target/linux/airoha/an7581/target.mk 2>/dev/null | head -1)
+if [ -z "$BOARD_ARCH" ]; then
+  # 兜底：从任意 target.mk 找 ARCH（多目标时取第一个），仍为空则退原逻辑
+  BOARD_ARCH=$(sed -n 's/^ARCH:=//p' \
+    "$PWD"/target/linux/*/*/target.mk 2>/dev/null | sort -u | head -1)
+fi
+
+RUST_TARGET=$(make --no-print-directory -s -f - TOPDIR="$PWD" \
+  BOARD_ARCH="$BOARD_ARCH" ci-rust-target <<'MAKE' 2>/dev/null
+CONFIG_ARCH := $(BOARD_ARCH)
+-include $(TOPDIR)/.config
 include $(TOPDIR)/rules.mk
 include $(TOPDIR)/feeds/packages/lang/rust/rust-values.mk
 .PHONY: ci-rust-target
