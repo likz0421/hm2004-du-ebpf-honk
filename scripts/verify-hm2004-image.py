@@ -10,6 +10,8 @@ import shutil
 import struct
 import subprocess
 import tempfile
+from verify_fmcs_module import verify_port_count
+from verify_v29_baseline import verify_baseline
 
 
 def require(ok, message):
@@ -58,6 +60,7 @@ def main():
     require(installed.get("luci-i18n-onu-zh-cn") == lock["expected"]["packages"]["luci-i18n-onu-zh-cn"], "ONU Chinese catalog version matches the audited lock")
     with tempfile.TemporaryDirectory(prefix="verify-hm2004-") as temp:
         tmp = Path(temp)
+        baseline_result = verify_baseline(image, installed, tmp)
         squashfs = tmp / "root.squashfs"
         with image.open("rb") as stream, mmap.mmap(stream.fileno(), 0, access=mmap.ACCESS_READ) as data:
             offset = data.find(b"hsqs")
@@ -87,7 +90,11 @@ def main():
         qemu = shutil.which("qemu-aarch64-static") or shutil.which("qemu-aarch64")
         require(bool(qemu), "aarch64 user emulator available")
         def target(path, *params):
-            return subprocess.check_output([qemu, "-L", str(root), str(root / path), *params], text=True, stderr=subprocess.PIPE, timeout=45)
+            result = subprocess.run([qemu, '-L', str(root), str(root/path), *params],
+                                    text=True, capture_output=True, timeout=45)
+            if result.returncode:
+                raise ValueError(f'Target {path} failed ({result.returncode}):\n{result.stderr}\n{result.stdout}')
+            return result.stdout
         caps = json.loads(target("usr/sbin/fttrd", "--capabilities"))
         require(isinstance(caps.get("adapters"), dict), "FTTR grouped adapter schema")
         for layer, key in [("omci", "omci_adapters"), ("bootstrap", "bootstrap_adapters")]:
@@ -97,6 +104,31 @@ def main():
         require(any(item.get("id") == "auto" for item in caps["adapters"]["omci"]), "auto OMCI adapter exists in pinned upstream")
         config = (root / "etc/config/fttr").read_text()
         require("config omci_auth 'global'" in config and "option auth_mode 'disabled'" in config, "ONU authentication defaults to disabled")
+        for path, expected in lock['expected']['fttr_assets_sha256'].items():
+            require(hashlib.sha256((root/path).read_bytes()).hexdigest() == expected,
+                    f'FTTR paired asset matches: {path}')
+        ports = re.search(r"^config ports ['\"]ports['\"]\n(.*?)(?=^config |\Z)", config, re.M | re.S)
+        require(ports is not None and "option enabled '1'" in ports.group(1)
+                and "option count '4'" in ports.group(1), 'FTTR new-install default is four enabled downstream ports')
+        require((root/'etc/rc.d/S19h3c-fmcs').is_symlink(), 'FMCS boot loader precedes network setup')
+        for directory in ['etc/modules.d', 'etc/modules-boot.d']:
+            require(not any('h3c-fmcs' in p.read_text(errors='replace')
+                            for p in (root/directory).glob('*') if p.is_file()),
+                    f'No early FMCS autoload in {directory}')
+        modules = list((root/'lib/modules').glob('*/h3c-fmcs.ko*'))
+        require(len(modules) == 1, 'Exactly one FMCS kernel module')
+        module = modules[0]
+        data = module.read_bytes()
+        if module.suffix == '.zst':
+            data = subprocess.check_output(['zstd', '-dc', str(module)])
+        elif module.suffix == '.xz':
+            import lzma
+            data = lzma.decompress(data)
+        elif module.suffix == '.gz':
+            import gzip
+            data = gzip.decompress(data)
+        fmcs_parameter = verify_port_count(data)
+        require(True, 'FMCS has a real read-only port_count parameter with checked setter')
         require(hashlib.sha256((root / "lib/firmware/FTTR_TOP.sbit").read_bytes()).hexdigest() == lock["expected"]["fpga_sha256"], "FPGA bitstream matches audited upstream")
         honk = (root / "etc/config/honk").read_text()
         require(re.search(r"option\s+enabled\s+['\"]0['\"]", honk) is not None, "honk defaults disabled")
@@ -126,7 +158,7 @@ def main():
         require(theme.is_file(), "Argon 3.1.4 browser compatibility module installed")
         template_result = verify_argon_templates(root, qemu, tmp)
         (image.parent / "plugin-sources.json").write_text(json.dumps(embedded, ensure_ascii=False, indent=2) + "\n")
-        (image.parent / "plugin-verification.json").write_text(json.dumps({"tag":args.tag,"passed":True,"packages":lock["expected"]["packages"],"fttr_capabilities":caps,"sources":lock["sources"],"argon_templates":template_result}, ensure_ascii=False, indent=2) + "\n")
+        (image.parent / "plugin-verification.json").write_text(json.dumps({"tag":args.tag,"passed":True,"packages":lock["expected"]["packages"],"fttr_capabilities":caps,"sources":lock["sources"],"argon_templates":template_result,"v29_baseline":baseline_result,"fmcs_port_count":fmcs_parameter,"image_sha256":hashlib.sha256(image.read_bytes()).hexdigest()}, ensure_ascii=False, indent=2) + "\n")
     print("All HM2004 image checks passed; target-device IPTV/WiFi traffic remains an on-device test.")
 
 

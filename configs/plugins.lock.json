@@ -9,19 +9,19 @@
   },
   "sources": {
     "fttr-backend": {
-      "repo": "LazuliKao/openwrt-fttr",
-      "branch": "main",
-      "commit": "cbcf1308f45259100391accc9ede7ac3e545676c",
-      "previous_commit": "fb3128263663ceb8ac978c7cb0eec0be7963e953"
+      "repo": "likz0421/openwrt-fttr",
+      "branch": "fix/v29-fttr-capacity",
+      "commit": "23af506c9987fb8e95900dea5c7b736d0bd11360",
+      "previous_commit": "cbcf1308f45259100391accc9ede7ac3e545676c"
     },
     "fttr-frontend": {
-      "repo": "LazuliKao/luci-app-fttr",
-      "branch": "package",
-      "commit": "e1a21e6e0d95fd3c6f39445b16d9e197b97f361d",
-      "source_commit": "385492a8c5f530847dde3948f21bf3860bccf84b",
-      "version": "2026.11.15.105855",
-      "previous_commit": "466a869d29fcadef165f4c78d69dcea4749eef52",
-      "previous_version": "2026.11.14.162613"
+      "repo": "likz0421/luci-app-fttr",
+      "branch": "package-v29-fttr-only",
+      "commit": "755cf43c17329ce44b4aa1adec8e90438c0cbf18",
+      "source_commit": "9581dce9cc83d02639b13a51eeabd77cbfcd4eae",
+      "version": "2026.11.18.1",
+      "previous_commit": "e1a21e6e0d95fd3c6f39445b16d9e197b97f361d",
+      "previous_version": "2026.11.15.105855"
     },
     "honk-feed": {
       "repo": "kenzok8/openwrt-honk",
@@ -142,10 +142,18 @@
       "omci-acs",
       "hl202-mqtt-acs"
     ],
+    "fttr_assets_sha256": {
+      "www/luci-static/resources/view/fttr/index.js": "cd42a09f948920089200c8d67b0a5e7cd53ddf4a7b755c7896c751e8b96a25dd",
+      "www/luci-static/resources/view/fttr/config.js": "b8855e10b03344f1d0ef1f9fdb8ea5f59101f2de46daeb09315a580c428544cc",
+      "www/luci-static/resources/view/fttr/topology.js": "ac35cbd09514ada01442b0d8f877a0a998c9a092683901ce22510b187bd73ee5",
+      "usr/libexec/fttr-ports": "907e2239742b2211d1ef9f500b11263a8e7a3d52e7e2522db0c15bd62f6052fa",
+      "etc/init.d/h3c-fmcs": "634ca6c4c0d11e3a4b67a0ec4f1961c0ce00df1e87bdfa65103330853818b07a"
+    },
     "fpga_sha256": "64d583215331d8b854dcc313be1fb82e171d601f5c11e45fd84d483c17bbc4ff",
     "packages": {
-      "luci-app-fttr": "2026.11.15.105855-r1",
-      "openwrt-fttr": "0.1.0-r1",
+      "luci-app-fttr": "2026.11.18.1-r1",
+      "openwrt-fttr": "0.1.0-r3",
+      "kmod-h3c-fmcs": "6.18.60-r2",
       "h3c-fmcs-firmware": "1.0-r1",
       "honk": "2026.11.12-r1",
       "luci-app-honk": "2026.11.12.2-r1",
