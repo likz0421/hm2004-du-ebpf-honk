@@ -142,17 +142,6 @@ else
   exit 1
 fi
 
-# =========================================================
-# Local frontend-only ONU port: never import the fork's service or flash scripts.
-if [ "$FTTR_PROFILE" = "h3c_hm2004-du" ]; then
-  ONU_PACKAGE="$SCRIPT_ROOT/onu/luci-app-onu"
-  [ -f "$ONU_PACKAGE/Makefile" ] || { echo "::error::ONU UI package missing"; exit 1; }
-  python3 "$SCRIPT_ROOT/scripts/verify-onu-ui.py" --source "$SCRIPT_ROOT" || exit 1
-  rm -rf "$PKG_DIR/luci-app-onu"
-  cp -a "$ONU_PACKAGE" "$PKG_DIR/luci-app-onu" || exit 1
-  echo "✅ 已拷贝: luci-app-onu (frontend-only, existing PON backend retained)"
-fi
-
 # h3c-fmcs / openwrt-fttr / h3c-fmcs-firmware —— FTTR 后端三件套 ★HM2004-DU 专属
 # 源：LazuliKao/openwrt-fttr（私有仓库）
 # ⚠ 这里必须用「裸 URL」：凭证由 workflow 的 GIT_ASKPASS 在认证时回调注入，
@@ -625,7 +614,7 @@ if [ -n "$(ls -A "$PKG_DIR" 2>/dev/null)" ]; then
   echo "=========================================="
   # 必装插件（config 里是 =y 的那几个）必须进索引，否则 defconfig 会静默剔除
   REQUIRED=""
-  [ "$FTTR_PROFILE" = "h3c_hm2004-du" ] && REQUIRED="$REQUIRED luci-app-onu"
+  [ "$FTTR_PROFILE" = "h3c_hm2004-du" ] && REQUIRED="$REQUIRED luci-app-pon"
   [ "$ADD_AIROHA_NPU" = "true" ] && REQUIRED="$REQUIRED luci-app-airoha-npu"
   if [ "$ADD_LUCI_APP" = "true" ]; then
     REQUIRED="$REQUIRED luci-app-natmode luci-app-pon-status luci-app-igmpproxy"

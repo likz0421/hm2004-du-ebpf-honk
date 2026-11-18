@@ -6,9 +6,9 @@
 'require poll';
 'require uci';
 'require view';
-'require onu-dashboard.components as components';
+'require pon.components as components';
 
-var STYLESHEET = 'view/onu-dashboard/onu.css';
+var STYLESHEET = 'view/pon/pon.css';
 
 /*
  * The PON views follow luci-theme-argon: cards, tables, buttons and the type

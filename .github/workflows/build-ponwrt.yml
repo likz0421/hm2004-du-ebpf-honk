@@ -1373,12 +1373,15 @@ jobs:
           # 这些戳只有编译结束才存在。source 模式下它们同样会被自举。
           bash "$GITHUB_WORKSPACE/scripts/pwrt-cache.sh" freeze "$CACHE_ROOT" || true
 
+      - name: Verify PON status regression
+        if: steps.compile.outputs.status == 'success' && env.PROFILE == 'h3c_hm2004-du'
+        run: |
+          node "$GITHUB_WORKSPACE/tests/onu-ui/status-tests.js" "$GITHUB_WORKSPACE/pon-ui/status.js"
+
       - name: Verify HM2004 plugin image
         id: verify_image
         if: steps.compile.outputs.status == 'success' && env.PROFILE == 'h3c_hm2004-du'
         run: |
-          # ONU frontend port must stay read-only before the image is released.
-          python3 "$GITHUB_WORKSPACE/scripts/verify-onu-ui.py" --source "$GITHUB_WORKSPACE"
           python3 "$GITHUB_WORKSPACE/scripts/verify-hm2004-image.py" "$BUILD_ROOT/openwrt" --tag "$GITHUB_REF_NAME"
           cp "$BUILD_ROOT/openwrt/configs.buildinfo" /tmp/configs.buildinfo 2>/dev/null || true
           cp "$BUILD_ROOT/openwrt/.config" "$BUILD_ROOT/openwrt/bin/targets/airoha/an7581/build.config"

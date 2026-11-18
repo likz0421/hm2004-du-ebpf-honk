@@ -10,8 +10,8 @@ function element(tag, attrs, children) {
 
 function stylesheet() {
 	if (document.querySelector('link[data-onu-dashboard]')) return;
-	document.head.appendChild(element('link', { rel: 'stylesheet', href: L.resource('view/onu-dashboard/onu.css'), 'data-onu-dashboard': '' }));
-	document.head.appendChild(element('link', { rel: 'stylesheet', href: L.resource('view/onu-dashboard/dashboard.css'), 'data-onu-dashboard': '' }));
+	document.head.appendChild(element('link', { rel: 'stylesheet', href: L.resource('view/pon/pon.css'), 'data-onu-dashboard': '' }));
+	document.head.appendChild(element('link', { rel: 'stylesheet', href: L.resource('view/pon/dashboard.css'), 'data-onu-dashboard': '' }));
 }
 function icon(name) {
 	var paths = { optical: 'M12 3v6m-7 3h14M5 12v8m7-8v8m7-8v8M8 3h8M3 20h4m3 0h4m3 0h4',
