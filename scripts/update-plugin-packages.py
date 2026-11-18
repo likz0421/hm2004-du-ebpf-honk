@@ -89,6 +89,36 @@ def geosite(ow):
     print("GeoSite updated with independently downloaded SHA256; current GeoIP preserved")
 
 
+def pon_ui(ow):
+    """Beautify the existing luci-app-pon status page with the ONU_CONFIG rich layout.
+
+    The rich status view, shared components and stylesheets are vendored in the
+    build repo under pon-ui/ and copied into the pinned pon_userspace feed's
+    luci-app-pon, so the PON menu keeps its single status entry. The feed's
+    package version is bumped so the image manifest reflects the new build.
+    """
+    app = ow / "feeds/pon_userspace/luci-app-pon"
+    ui = REPO / "pon-ui"
+    for rel, dest in [
+        ("status.js", app / "htdocs/luci-static/resources/view/pon/status.js"),
+        ("components.js", app / "htdocs/luci-static/resources/pon/components.js"),
+        ("pon.css", app / "htdocs/luci-static/resources/view/pon/pon.css"),
+        ("dashboard.css", app / "htdocs/luci-static/resources/view/pon/dashboard.css"),
+    ]:
+        src = ui / rel
+        if not src.is_file():
+            raise ValueError(f"pon-ui/{rel} missing")
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        dest.write_bytes(src.read_bytes())
+    makefile = app / "Makefile"
+    text = makefile.read_text()
+    old = "PKG_RELEASE:=3\n"
+    if old not in text:
+        raise ValueError("luci-app-pon Makefile expected PKG_RELEASE:=3")
+    makefile.write_text(text.replace(old, "PKG_RELEASE:=4\n", 1))
+    print("PON status page beautified with ONU_CONFIG rich layout; luci-app-pon bumped to r4")
+
+
 def main():
     p = argparse.ArgumentParser()
     p.add_argument("openwrt", type=Path)
@@ -97,6 +127,7 @@ def main():
     argon(ow)
     rtp2httpd(ow)
     geosite(ow)
+    pon_ui(ow)
 
 
 if __name__ == "__main__":

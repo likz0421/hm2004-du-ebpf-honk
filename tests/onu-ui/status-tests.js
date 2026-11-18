@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 'use strict';
 const fs = require('node:fs'), vm = require('node:vm'), assert = require('node:assert/strict'), path = require('node:path');
-const source = process.argv[2] || path.join(__dirname, 'status.patched.js');
+const source = process.argv[2] || path.join(__dirname, '..', '..', 'pon-ui', 'status.js');
 const base = JSON.parse(fs.readFileSync(path.join(__dirname, 'fixtures/pbs05-schema1.json')));
 const clone = x => JSON.parse(JSON.stringify(x));
 function node(tag, attrs, children) {
